@@ -119,7 +119,8 @@ protected:
 	void HandleMove(const FInputActionValue& Value);
 	void HandleLook(const FInputActionValue& Value);
 	void HandleLightAttack();
-	void HandleHeavyAttack();
+	void HandleHeavyAttackStart();
+	void HandleHeavyAttackRelease();
 	void HandleDodge();
 	void HandleBlockStart();
 	void HandleBlockEnd();
@@ -143,6 +144,13 @@ protected:
 
 	/** Target zoom distance (smoothly interpolated) */
 	float DesiredZoomDistance = 800.0f;
+
+	/** World time when heavy charge started */
+	float HeavyChargeStartTime = 0.0f;
+
+	/** Maximum charge time before auto-firing */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Charge", meta = (ClampMin = 0.5))
+	float MaxChargeTime = 2.0f;
 
 private:
 

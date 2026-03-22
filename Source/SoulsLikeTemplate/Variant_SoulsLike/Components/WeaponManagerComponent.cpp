@@ -95,12 +95,13 @@ void UWeaponManagerComponent::SwitchWeapon(int32 Direction)
 
 const FComboAttack* UWeaponManagerComponent::GetComboAttack(int32 ComboIndex, EAttackType AttackType) const
 {
-	if (!CurrentWeaponData)
+	const UWeaponDataAsset* Data = GetCurrentWeaponData();
+	if (!Data)
 	{
 		return nullptr;
 	}
 
-	const TArray<FComboAttack>& ComboChain = CurrentWeaponData->GetComboChain(AttackType);
+	const TArray<FComboAttack>& ComboChain = Data->GetComboChain(AttackType);
 	if (ComboChain.IsValidIndex(ComboIndex))
 	{
 		return &ComboChain[ComboIndex];
@@ -111,20 +112,22 @@ const FComboAttack* UWeaponManagerComponent::GetComboAttack(int32 ComboIndex, EA
 
 UAnimMontage* UWeaponManagerComponent::GetAttackMontage(EAttackType AttackType) const
 {
-	if (!CurrentWeaponData)
+	const UWeaponDataAsset* Data = GetCurrentWeaponData();
+	if (!Data)
 	{
 		return nullptr;
 	}
 
-	return CurrentWeaponData->GetAttackMontageData(AttackType).AttackMontage;
+	return Data->GetAttackMontageData(AttackType).AttackMontage;
 }
 
 float UWeaponManagerComponent::GetAttackPlayRate(EAttackType AttackType) const
 {
-	if (!CurrentWeaponData)
+	const UWeaponDataAsset* Data = GetCurrentWeaponData();
+	if (!Data)
 	{
 		return 1.0f;
 	}
 
-	return CurrentWeaponData->GetAttackMontageData(AttackType).PlayRate * CurrentWeaponData->AttackSpeedModifier;
+	return Data->GetAttackMontageData(AttackType).PlayRate * Data->AttackSpeedModifier;
 }

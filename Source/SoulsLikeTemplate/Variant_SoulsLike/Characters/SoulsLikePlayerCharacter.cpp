@@ -143,6 +143,21 @@ void ASoulsLikePlayerCharacter::Tick(float DeltaTime)
 
 	UpdateMovementOrientation();
 
+	// Auto-fire heavy attack at max charge
+	if (bIsChargingHeavy)
+	{
+		const float ChargeTime = GetWorld()->GetTimeSeconds() - HeavyChargeStartTime;
+		if (ChargeTime >= MaxChargeTime)
+		{
+			bIsChargingHeavy = false;
+			// Force jump to attack section
+			if (bHasLoopedChargedAttack)
+			{
+				CheckChargedAttack();
+			}
+		}
+	}
+
 	// Smooth zoom interpolation
 	if (CameraBoom)
 	{
@@ -296,7 +311,8 @@ void ASoulsLikePlayerCharacter::SetupPlayerInputComponent(UInputComponent* Playe
 
 	// Combat
 	EnhancedInput->BindAction(IA_LightAttack, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleLightAttack);
-	EnhancedInput->BindAction(IA_HeavyAttack, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleHeavyAttack);
+	EnhancedInput->BindAction(IA_HeavyAttack, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleHeavyAttackStart);
+	EnhancedInput->BindAction(IA_HeavyAttack, ETriggerEvent::Completed, this, &ASoulsLikePlayerCharacter::HandleHeavyAttackRelease);
 	EnhancedInput->BindAction(IA_Dodge, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleDodge);
 
 	// Block (hold)
@@ -393,17 +409,12 @@ void ASoulsLikePlayerCharacter::HandleLightAttack()
 		return;
 	}
 
-	// Try finisher first (riposte on stance-broken, backstab from behind)
-	if (AttemptFinisher())
-	{
-		return;
-	}
-
 	AttemptAttack(EAttackType::Light);
 }
 
-void ASoulsLikePlayerCharacter::HandleHeavyAttack()
+void ASoulsLikePlayerCharacter::HandleHeavyAttackStart()
 {
+	// If already attacking, queue heavy as combo
 	if (StateComponent->GetCurrentState() == ECharacterState::Attacking)
 	{
 		AttemptAttack(EAttackType::Heavy);
@@ -415,7 +426,31 @@ void ASoulsLikePlayerCharacter::HandleHeavyAttack()
 		InputBuffer->BufferInput(EBufferedInput::HeavyAttack);
 		return;
 	}
+
+	// Start charging — set flag BEFORE playing the montage so CheckChargedAttack loops
+	bIsChargingHeavy = true;
+	bHasLoopedChargedAttack = false;
+	HeavyChargeStartTime = GetWorld()->GetTimeSeconds();
+
+	// Start the charged attack montage (it will loop via CheckChargedAttack)
 	AttemptAttack(EAttackType::Heavy);
+}
+
+void ASoulsLikePlayerCharacter::HandleHeavyAttackRelease()
+{
+	if (!bIsChargingHeavy)
+	{
+		return;
+	}
+
+	bIsChargingHeavy = false;
+
+	// If the charge loop has already started, CheckChargedAttack will jump to attack section on next notify
+	// If the montage hasn't looped yet, force jump to attack section now
+	if (bHasLoopedChargedAttack)
+	{
+		CheckChargedAttack();
+	}
 }
 
 void ASoulsLikePlayerCharacter::HandleDodge()
@@ -475,6 +510,13 @@ void ASoulsLikePlayerCharacter::OnStateChangedHandler(ECharacterState NewState)
 	else if (NewState == ECharacterState::Dead)
 	{
 		InputBuffer->ClearBuffer();
+		bIsChargingHeavy = false;
+	}
+
+	// Cancel charge if interrupted (stunned, etc.)
+	if (NewState == ECharacterState::Stunned || NewState == ECharacterState::Dodging)
+	{
+		bIsChargingHeavy = false;
 	}
 }
 
@@ -503,6 +545,12 @@ void ASoulsLikePlayerCharacter::UpdateMovementOrientation()
 {
 	UCharacterMovementComponent* CMC = GetCharacterMovement();
 	if (!CMC)
+	{
+		return;
+	}
+
+	// Don't override rotation settings during dodge (we disable orient-to-movement for directional dodge)
+	if (StateComponent->GetCurrentState() == ECharacterState::Dodging)
 	{
 		return;
 	}

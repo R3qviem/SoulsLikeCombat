@@ -7,6 +7,7 @@
 #include "SoulsLikeTypes.h"
 #include "SoulsLikeDamageable.h"
 #include "SoulsLikeAttacker.h"
+#include "CombatAttacker.h"
 #include "SoulsLikeBaseCharacter.generated.h"
 
 class UCharacterStateComponent;
@@ -23,7 +24,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogSoulsLikeCharacter, Log, All);
  *  Implements the combat pipeline: attack, dodge, block, parry, damage processing.
  */
 UCLASS(abstract)
-class ASoulsLikeBaseCharacter : public ACharacter, public ISoulsLikeDamageable, public ISoulsLikeAttacker
+class ASoulsLikeBaseCharacter : public ACharacter, public ISoulsLikeDamageable, public ISoulsLikeAttacker, public ICombatAttacker
 {
 	GENERATED_BODY()
 
@@ -172,6 +173,12 @@ public:
 	virtual void OnComboWindowClose() override;
 	virtual void OnActionEnd() override;
 
+	// ===== ICombatAttacker INTERFACE (bridge for existing montage notifies) =====
+
+	virtual void DoAttackTrace(FName DamageSourceBone) override;
+	virtual void CheckCombo() override;
+	virtual void CheckChargedAttack() override;
+
 protected:
 
 	// ===== DAMAGE PROCESSING =====
@@ -225,6 +232,20 @@ protected:
 	/** Time at which blocking began (for parry window calculation) */
 	float BlockStartTime = 0.0f;
 
+	/** Whether the character is holding a charged heavy attack (set by input on player, always false on AI) */
+	bool bIsChargingHeavy = false;
+
+	/** Whether the charged attack has looped at least once */
+	bool bHasLoopedChargedAttack = false;
+
+	/** Section name in the charged attack montage for the charge loop */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Charged")
+	FName ChargeLoopSection = FName("Charge");
+
+	/** Section name in the charged attack montage for the actual attack */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Charged")
+	FName ChargeAttackSection = FName("Attack");
+
 	/** Dodge impulse strength */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Dodge", meta = (ClampMin = 0, Units = "cm/s"))
 	float DodgeImpulse = 800.0f;
@@ -237,6 +258,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Finisher", meta = (ClampMin = 10, ClampMax = 90))
 	float BackstabAngleThreshold = 60.0f;
 
+	/** Death animation sequence (played directly on mesh — freezes on last frame) */
+	UPROPERTY()
+	TObjectPtr<UAnimSequenceBase> DeathAnimSequence;
+
+	/** Light hit reaction sequence (played as dynamic montage when no montage is assigned) */
+	UPROPERTY()
+	TObjectPtr<UAnimSequenceBase> LightHitReactionSequence;
+
+	/** Heavy hit reaction sequence (played as dynamic montage when no montage is assigned) */
+	UPROPERTY()
+	TObjectPtr<UAnimSequenceBase> HeavyHitReactionSequence;
+
 	// ===== INTERNAL =====
 
 	/** Attack montage ended delegate */
@@ -244,6 +277,12 @@ protected:
 
 	/** Timer handle for dodge state recovery when no montage is available */
 	FTimerHandle DodgeRecoveryTimerHandle;
+
+	/** Timer handle for enabling ragdoll after death animation finishes */
+	FTimerHandle DeathRagdollTimerHandle;
+
+	/** Enable ragdoll physics so the corpse falls to the ground */
+	void EnableDeathRagdoll();
 
 	/** Called when the attack montage ends */
 	void AttackMontageEnded(UAnimMontage* Montage, bool bInterrupted);

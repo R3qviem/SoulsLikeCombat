@@ -103,6 +103,11 @@ void ASoulsLikeBaseEnemy::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Enemy must not block the player's camera spring arm probe (ECC_Camera channel)
+	// Set in BeginPlay because the Pawn collision profile overrides constructor settings
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+
 	// Get the health bar widget instance
 	if (HealthBarWidget)
 	{
@@ -187,10 +192,7 @@ void ASoulsLikeBaseEnemy::OnActionEnd()
 
 void ASoulsLikeBaseEnemy::HandleDeath()
 {
-	// Disable collision capsule
-	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-	// Call base death handling
+	// Call base death handling (disables capsule, enables ragdoll)
 	ASoulsLikeBaseCharacter::HandleDeath();
 
 	// Hide health bar

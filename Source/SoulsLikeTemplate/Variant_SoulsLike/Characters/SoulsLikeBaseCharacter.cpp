@@ -12,8 +12,10 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimSequence.h"
 #include "TimerManager.h"
 #include "Engine/OverlapResult.h"
+#include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY(LogSoulsLikeCharacter);
 
@@ -40,6 +42,29 @@ ASoulsLikeBaseCharacter::ASoulsLikeBaseCharacter()
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
+
+	// Load death animation sequence (will be played directly on mesh at runtime)
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> DeathSeqFinder(
+		TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Front_01.MM_Death_Front_01"));
+	if (DeathSeqFinder.Succeeded())
+	{
+		DeathAnimSequence = DeathSeqFinder.Object;
+	}
+
+	// Load hit reaction animation sequences (will be played as dynamic montages at runtime)
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> LightHitReactFinder(
+		TEXT("/Game/Characters/Mannequins/Anims/Rifle/HitReact/MM_HitReact_Front_Lgt_01.MM_HitReact_Front_Lgt_01"));
+	if (LightHitReactFinder.Succeeded())
+	{
+		LightHitReactionSequence = LightHitReactFinder.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> HeavyHitReactFinder(
+		TEXT("/Game/Characters/Mannequins/Anims/Rifle/HitReact/MM_HitReact_Front_Hvy_01.MM_HitReact_Front_Hvy_01"));
+	if (HeavyHitReactFinder.Succeeded())
+	{
+		HeavyHitReactionSequence = HeavyHitReactFinder.Object;
+	}
 }
 
 void ASoulsLikeBaseCharacter::BeginPlay()
@@ -58,6 +83,9 @@ void ASoulsLikeBaseCharacter::Landed(const FHitResult& Hit)
 	{
 		// Cancel any pending dodge recovery timer since we landed
 		GetWorld()->GetTimerManager().ClearTimer(DodgeRecoveryTimerHandle);
+
+		// Re-enable orient-to-movement (disabled during dodge)
+		GetCharacterMovement()->bOrientRotationToMovement = true;
 
 		// Let the dodge montage finish if it's still playing, otherwise go to Idle immediately
 		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
@@ -143,40 +171,7 @@ void ASoulsLikeBaseCharacter::AttemptDodge(FVector2D InputDirection)
 		return;
 	}
 
-	// Play dodge montage
-	UAnimMontage* DodgeMontageToPlay = nullptr;
-	if (WeaponData)
-	{
-		DodgeMontageToPlay = WeaponData->DodgeMontage;
-	}
-
-	bool bMontagePlayed = false;
-	if (DodgeMontageToPlay)
-	{
-		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
-		{
-			const float MontageLength = AnimInstance->Montage_Play(DodgeMontageToPlay, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
-			if (MontageLength > 0.0f)
-			{
-				AnimInstance->Montage_SetEndDelegate(OnAttackMontageEndedDelegate, DodgeMontageToPlay);
-				bMontagePlayed = true;
-			}
-		}
-	}
-
-	// If no montage played, schedule state recovery via timer
-	if (!bMontagePlayed)
-	{
-		GetWorld()->GetTimerManager().SetTimer(DodgeRecoveryTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
-		{
-			if (StateComponent->GetCurrentState() == ECharacterState::Dodging)
-			{
-				StateComponent->ForceState(ECharacterState::Idle);
-			}
-		}), 0.5f, false);
-	}
-
-	// Calculate dodge direction
+	// Calculate dodge direction FIRST (needed for rotation before montage)
 	FVector DodgeDirection;
 	if (InputDirection.IsNearlyZero())
 	{
@@ -199,8 +194,52 @@ void ASoulsLikeBaseCharacter::AttemptDodge(FVector2D InputDirection)
 		}
 	}
 
-	// Launch the character using CharacterMovementComponent
-	LaunchCharacter(DodgeDirection * DodgeImpulse, true, false);
+	// Temporarily disable rotation overrides so SetActorRotation isn't overridden by CMC
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	bUseControllerRotationYaw = false;
+
+	// Rotate character to face dodge direction BEFORE montage plays
+	// This way root motion carries the character in the correct direction
+	if (!DodgeDirection.IsNearlyZero())
+	{
+		SetActorRotation(DodgeDirection.Rotation());
+	}
+
+	// Play dodge montage
+	UAnimMontage* DodgeMontageToPlay = nullptr;
+	if (WeaponData)
+	{
+		DodgeMontageToPlay = WeaponData->DodgeMontage;
+	}
+
+	bool bMontagePlayed = false;
+	if (DodgeMontageToPlay)
+	{
+		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+		{
+			const float MontageLength = AnimInstance->Montage_Play(DodgeMontageToPlay, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
+			if (MontageLength > 0.0f)
+			{
+				AnimInstance->Montage_SetEndDelegate(OnAttackMontageEndedDelegate, DodgeMontageToPlay);
+				bMontagePlayed = true;
+			}
+		}
+	}
+
+	// If no montage played, schedule state recovery via timer and use impulse instead
+	if (!bMontagePlayed)
+	{
+		LaunchCharacter(DodgeDirection * DodgeImpulse, true, false);
+
+		GetWorld()->GetTimerManager().SetTimer(DodgeRecoveryTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			GetCharacterMovement()->bOrientRotationToMovement = true;
+			if (StateComponent->GetCurrentState() == ECharacterState::Dodging)
+			{
+				StateComponent->ForceState(ECharacterState::Idle);
+			}
+		}), 0.5f, false);
+	}
 }
 
 bool ASoulsLikeBaseCharacter::AttemptFinisher()
@@ -525,6 +564,33 @@ void ASoulsLikeBaseCharacter::OnActionEnd()
 	}
 }
 
+// ===== ICombatAttacker BRIDGE =====
+
+void ASoulsLikeBaseCharacter::DoAttackTrace(FName DamageSourceBone)
+{
+	// Bridge: existing Combat montage notifies call this — forward to our system
+	ExecuteAttackTrace(DamageSourceBone);
+}
+
+void ASoulsLikeBaseCharacter::CheckCombo()
+{
+	// Bridge: existing Combat montage combo check — forward to our combo window
+	OnComboWindowOpen();
+}
+
+void ASoulsLikeBaseCharacter::CheckChargedAttack()
+{
+	// Mark that we've looped at least once
+	bHasLoopedChargedAttack = true;
+
+	// Jump to loop or attack section based on whether we're still charging
+	UAnimMontage* HeavyMontage = WeaponManager->GetAttackMontage(EAttackType::Heavy);
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->Montage_JumpToSection(bIsChargingHeavy ? ChargeLoopSection : ChargeAttackSection, HeavyMontage);
+	}
+}
+
 // ===== DAMAGE PROCESSING =====
 
 void ASoulsLikeBaseCharacter::ProcessDamage(FDamageInfo DamageInfo)
@@ -607,6 +673,12 @@ void ASoulsLikeBaseCharacter::ProcessDamage(FDamageInfo DamageInfo)
 		{
 			StateComponent->ForceState(ECharacterState::Stunned);
 
+			// Stop any active attack montage BEFORE playing hit reaction
+			if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+			{
+				AnimInstance->StopAllMontages(0.1f);
+			}
+
 			// Stance broken = heavy stagger (opens riposte window)
 			if (bStanceBroken)
 			{
@@ -615,12 +687,6 @@ void ASoulsLikeBaseCharacter::ProcessDamage(FDamageInfo DamageInfo)
 			else
 			{
 				PlayHitReaction(DamageInfo.HitReaction);
-			}
-
-			// Stop any active attack montage
-			if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
-			{
-				AnimInstance->StopAllMontages(0.15f);
 			}
 		}
 	}
@@ -643,23 +709,74 @@ void ASoulsLikeBaseCharacter::HandleDeath()
 	// Disable movement
 	GetCharacterMovement()->DisableMovement();
 
-	// Play death montage if available, otherwise ragdoll
+	// Stop any playing montages
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->StopAllMontages(0.1f);
+	}
+
+	// Completely disable the capsule — no collision with anything
+	// This prevents camera collision with the corpse and player pushing the body
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetCapsuleComponent()->SetCapsuleHalfHeight(10.0f);
+	GetCapsuleComponent()->SetCapsuleRadius(10.0f);
+
+	// Disable camera collision on the mesh too (spring arm probes against mesh)
+	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+
+	// Play death animation, then enable ragdoll so the body falls to the ground
+	float DeathAnimDuration = 0.0f;
+
 	if (DeathMontage)
 	{
 		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
 		{
-			AnimInstance->Montage_Play(DeathMontage, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
+			DeathAnimDuration = AnimInstance->Montage_Play(DeathMontage, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
 		}
+	}
+	else if (DeathAnimSequence)
+	{
+		GetMesh()->PlayAnimation(DeathAnimSequence, false);
+		DeathAnimDuration = DeathAnimSequence->GetPlayLength();
+	}
+
+	// After the death animation finishes, enable ragdoll so the body collapses to the ground
+	if (DeathAnimDuration > 0.0f)
+	{
+		GetWorld()->GetTimerManager().SetTimer(DeathRagdollTimerHandle, this,
+			&ASoulsLikeBaseCharacter::EnableDeathRagdoll, DeathAnimDuration, false);
 	}
 	else
 	{
-		// Ragdoll fallback
-		GetMesh()->SetSimulatePhysics(true);
-		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// No animation — ragdoll immediately
+		EnableDeathRagdoll();
 	}
 
 	OnDied.Broadcast();
 	OnDeathStarted();
+}
+
+void ASoulsLikeBaseCharacter::EnableDeathRagdoll()
+{
+	// Stop the animation so it doesn't fight the ragdoll
+	GetMesh()->Stop();
+
+	// Detach mesh from capsule so ragdoll isn't constrained by it
+	GetMesh()->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+
+	// Use Ragdoll collision profile — it already blocks WorldStatic (floor)
+	// Do NOT override its responses, or the ragdoll will fall through
+	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+
+	// Only override camera — ragdoll should not push the player camera
+	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	GetMesh()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+
+	// Enable ragdoll physics
+	GetMesh()->SetAllBodiesSimulatePhysics(true);
+	GetMesh()->SetSimulatePhysics(true);
+	GetMesh()->WakeAllRigidBodies();
 }
 
 void ASoulsLikeBaseCharacter::HandleParry(AActor* ParriedActor)
@@ -698,31 +815,46 @@ void ASoulsLikeBaseCharacter::HandleParry(AActor* ParriedActor)
 void ASoulsLikeBaseCharacter::PlayHitReaction(EHitReactionType ReactionType)
 {
 	UAnimMontage* ReactionMontage = nullptr;
+	UAnimSequenceBase* ReactionSequence = nullptr;
 
 	switch (ReactionType)
 	{
 	case EHitReactionType::Light:
 		ReactionMontage = LightHitReactionMontage;
+		ReactionSequence = LightHitReactionSequence;
 		break;
 	case EHitReactionType::Heavy:
-		ReactionMontage = HeavyHitReactionMontage;
-		break;
 	case EHitReactionType::Knockdown:
-		ReactionMontage = KnockdownMontage;
+		ReactionMontage = HeavyHitReactionMontage;
+		ReactionSequence = HeavyHitReactionSequence;
 		break;
 	default:
 		break;
 	}
 
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (!AnimInstance)
+	{
+		return;
+	}
+
 	if (ReactionMontage)
 	{
-		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+		// Use pre-assigned montage
+		const float MontageLength = AnimInstance->Montage_Play(ReactionMontage, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
+		if (MontageLength > 0.0f)
 		{
-			const float MontageLength = AnimInstance->Montage_Play(ReactionMontage, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
-			if (MontageLength > 0.0f)
-			{
-				AnimInstance->Montage_SetEndDelegate(OnAttackMontageEndedDelegate, ReactionMontage);
-			}
+			AnimInstance->Montage_SetEndDelegate(OnAttackMontageEndedDelegate, ReactionMontage);
+		}
+	}
+	else if (ReactionSequence)
+	{
+		// Play AnimSequence as dynamic montage — blends back to locomotion when done
+		UAnimMontage* DynMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
+			ReactionSequence, FName("DefaultSlot"), 0.1f, 0.2f, 1.0f, 1, 0.0f, 0.0f);
+		if (DynMontage)
+		{
+			AnimInstance->Montage_SetEndDelegate(OnAttackMontageEndedDelegate, DynMontage);
 		}
 	}
 }
@@ -736,6 +868,9 @@ void ASoulsLikeBaseCharacter::AttackMontageEnded(UAnimMontage* Montage, bool bIn
 	bComboQueued = false;
 	bComboWindowOpen = false;
 	CurrentComboIndex = 0;
+
+	// Re-enable orient-to-movement (disabled during dodge)
+	GetCharacterMovement()->bOrientRotationToMovement = true;
 
 	// Return to idle if not dead
 	if (StateComponent->GetCurrentState() != ECharacterState::Dead)
