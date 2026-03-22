@@ -80,4 +80,7 @@ private:
 
 	/** Release the current lock */
 	void ReleaseLock();
+
+	/** Show/hide health bar on target enemy */
+	void SetTargetHealthBarVisible(AActor* Target, bool bVisible);
 };

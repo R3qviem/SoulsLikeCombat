@@ -91,12 +91,15 @@ ASoulsLikeBaseEnemy::ASoulsLikeBaseEnemy()
 	// Default health
 	MaxHealth = 80.0f;
 
-	// Create health bar widget component
+	// Create health bar widget component — will be hidden in BeginPlay after widget is initialized
 	HealthBarWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBar"));
 	HealthBarWidget->SetupAttachment(RootComponent);
 	HealthBarWidget->SetRelativeLocation(FVector(0.0f, 0.0f, 100.0f));
 	HealthBarWidget->SetDrawSize(FVector2D(150.0f, 15.0f));
 	HealthBarWidget->SetWidgetSpace(EWidgetSpace::Screen);
+
+	// Use our C++ health bar widget — no Blueprint needed
+	HealthBarWidget->SetWidgetClass(USoulsLikeEnemyHealthBar::StaticClass());
 }
 
 void ASoulsLikeBaseEnemy::BeginPlay()
@@ -108,14 +111,16 @@ void ASoulsLikeBaseEnemy::BeginPlay()
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
-	// Get the health bar widget instance
+	// Get the health bar widget instance, initialize at full, then hide until targeted
 	if (HealthBarWidget)
 	{
+		HealthBarWidget->InitWidget();
 		HealthBarInstance = Cast<USoulsLikeEnemyHealthBar>(HealthBarWidget->GetUserWidgetObject());
 		if (HealthBarInstance)
 		{
-			HealthBarInstance->SetHealthPercentage(1.0f);
+			HealthBarInstance->SetHealthPercent(1.0f);
 		}
+		HealthBarWidget->SetHiddenInGame(true);
 	}
 
 	// Bind health changed to update the health bar
@@ -233,6 +238,28 @@ void ASoulsLikeBaseEnemy::OnHealthBarUpdate(float NewHealthPercent)
 {
 	if (HealthBarInstance)
 	{
-		HealthBarInstance->SetHealthPercentage(NewHealthPercent);
+		HealthBarInstance->SetHealthPercent(NewHealthPercent);
+	}
+}
+
+void ASoulsLikeBaseEnemy::ShowHealthBar()
+{
+	if (HealthBarWidget)
+	{
+		HealthBarWidget->SetHiddenInGame(false);
+
+		// Update with current health so the bar is correct when first shown
+		if (HealthBarInstance)
+		{
+			HealthBarInstance->SetHealthPercent(GetHealthPercent());
+		}
+	}
+}
+
+void ASoulsLikeBaseEnemy::HideHealthBar()
+{
+	if (HealthBarWidget)
+	{
+		HealthBarWidget->SetHiddenInGame(true);
 	}
 }

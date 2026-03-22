@@ -16,6 +16,7 @@
 #include "TimerManager.h"
 #include "Engine/OverlapResult.h"
 #include "UObject/ConstructorHelpers.h"
+#include "DrawDebugHelpers.h"
 
 DEFINE_LOG_CATEGORY(LogSoulsLikeCharacter);
 
@@ -477,6 +478,11 @@ void ASoulsLikeBaseCharacter::ExecuteAttackTrace(FName SourceBone)
 	const FVector TraceStart = GetMesh()->GetSocketLocation(SourceBone);
 	const FVector TraceEnd = TraceStart + (GetActorForwardVector() * AttackData->TraceDistance);
 
+	// Debug draw: show attack trace sphere sweep
+	DrawDebugSphere(GetWorld(), TraceStart, AttackData->TraceRadius, 12, FColor::Yellow, false, 1.0f);
+	DrawDebugSphere(GetWorld(), TraceEnd, AttackData->TraceRadius, 12, FColor::Yellow, false, 1.0f);
+	DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Yellow, false, 1.0f, 0, 2.0f);
+
 	FCollisionObjectQueryParams ObjectParams;
 	ObjectParams.AddObjectTypesToQuery(ECC_Pawn);
 	ObjectParams.AddObjectTypesToQuery(ECC_WorldDynamic);
@@ -511,6 +517,9 @@ void ASoulsLikeBaseCharacter::ExecuteAttackTrace(FName SourceBone)
 			}
 
 			HitActorsThisSwing.Add(HitActor);
+
+			// Debug draw: hit confirmation
+			DrawDebugSphere(GetWorld(), Hit.ImpactPoint, 15.0f, 8, FColor::Green, false, 1.5f);
 
 			// Build the damage info
 			FDamageInfo DamageInfoToSend;

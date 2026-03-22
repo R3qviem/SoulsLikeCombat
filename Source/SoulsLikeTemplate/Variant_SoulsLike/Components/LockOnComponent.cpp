@@ -2,6 +2,7 @@
 
 #include "LockOnComponent.h"
 #include "SoulsLikeDamageable.h"
+#include "SoulsLikeBaseEnemy.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -40,6 +41,7 @@ void ULockOnComponent::ToggleLockOn()
 		if (BestTarget)
 		{
 			LockedTarget = BestTarget;
+			SetTargetHealthBarVisible(LockedTarget, true);
 		}
 	}
 }
@@ -126,7 +128,9 @@ void ULockOnComponent::SwitchTarget(float Direction)
 
 	if (BestTarget)
 	{
+		SetTargetHealthBarVisible(LockedTarget, false);
 		LockedTarget = BestTarget;
+		SetTargetHealthBarVisible(LockedTarget, true);
 	}
 }
 
@@ -296,5 +300,21 @@ void ULockOnComponent::ValidateLock()
 
 void ULockOnComponent::ReleaseLock()
 {
+	SetTargetHealthBarVisible(LockedTarget, false);
 	LockedTarget = nullptr;
+}
+
+void ULockOnComponent::SetTargetHealthBarVisible(AActor* Target, bool bVisible)
+{
+	if (ASoulsLikeBaseEnemy* Enemy = Cast<ASoulsLikeBaseEnemy>(Target))
+	{
+		if (bVisible)
+		{
+			Enemy->ShowHealthBar();
+		}
+		else
+		{
+			Enemy->HideHealthBar();
+		}
+	}
 }

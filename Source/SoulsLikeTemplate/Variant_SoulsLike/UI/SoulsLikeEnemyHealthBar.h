@@ -7,10 +7,10 @@
 #include "SoulsLikeEnemyHealthBar.generated.h"
 
 /**
- *  World-space enemy health bar widget base class.
- *  Create a Widget Blueprint derived from this class and implement the visual layout.
+ *  Self-contained enemy health bar widget.
+ *  Builds its layout via NativeOnInitialized using the WidgetTree.
  */
-UCLASS(abstract)
+UCLASS()
 class USoulsLikeEnemyHealthBar : public UUserWidget
 {
 	GENERATED_BODY()
@@ -18,6 +18,14 @@ class USoulsLikeEnemyHealthBar : public UUserWidget
 public:
 
 	/** Update the health bar fill percentage (0-1) */
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Health Bar")
-	void SetHealthPercentage(float Percent);
+	UFUNCTION(BlueprintCallable, Category = "Health Bar")
+	void SetHealthPercent(float Percent);
+
+	virtual void NativeOnInitialized() override;
+
+private:
+
+	/** Cached progress bar reference */
+	UPROPERTY()
+	TObjectPtr<class UProgressBar> HealthBar;
 };

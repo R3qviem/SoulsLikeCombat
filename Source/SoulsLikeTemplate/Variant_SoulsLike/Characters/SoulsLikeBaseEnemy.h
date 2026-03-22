@@ -64,6 +64,14 @@ public:
 
 	// ===== DANGER TRACKING =====
 
+	/** Show the health bar (called when targeted by lock-on) */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void ShowHealthBar();
+
+	/** Hide the health bar (called when lock-on releases) */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void HideHealthBar();
+
 	/** Record an incoming danger source for AI reaction */
 	UFUNCTION(BlueprintCallable, Category = "AI")
 	void NotifyOfDanger(const FVector& Location, AActor* Source);
