@@ -163,6 +163,36 @@ struct FAttackMontageData
 	float PlayRate = 1.0f;
 };
 
+// ===== ITEM TYPES =====
+
+class UItemDataAsset;
+
+/** Item classification */
+UENUM(BlueprintType)
+enum class EItemType : uint8
+{
+	Consumable,
+	Material,
+	KeyItem,
+	Weapon,
+	Equipment
+};
+
+/** A single inventory entry (item + stack count) */
+USTRUCT(BlueprintType)
+struct FInventoryItem
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<const UItemDataAsset> ItemData = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int32 StackCount = 1;
+
+	bool IsValid() const { return ItemData != nullptr; }
+};
+
 // ===== DELEGATES =====
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHealthChanged, float, NewHealthPercent);
@@ -170,3 +200,4 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnStaminaChanged, float, NewStamina
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnStateChanged, ECharacterState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCharacterDied);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDamageReceived, const FDamageInfo&, DamageInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);

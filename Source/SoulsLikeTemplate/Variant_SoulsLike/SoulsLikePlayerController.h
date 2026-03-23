@@ -8,6 +8,7 @@
 
 class UInputMappingContext;
 class USoulsLikeHUD;
+class UInventoryWidget;
 class ASoulsLikePlayerCharacter;
 
 /**
@@ -36,6 +37,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Respawn")
 	void SetRespawnTransform(const FTransform& NewTransform);
 
+	/** Toggle inventory UI visibility */
+	void ToggleInventory();
+
 protected:
 
 	/** Input mapping contexts to apply by default */
@@ -49,6 +53,12 @@ protected:
 	/** The active HUD widget */
 	UPROPERTY()
 	TObjectPtr<USoulsLikeHUD> HUDWidget;
+
+	/** Inventory widget */
+	UPROPERTY()
+	TObjectPtr<UInventoryWidget> InventoryWidget;
+
+	bool bInventoryOpen = false;
 
 	/** Transform where the player will respawn */
 	FTransform RespawnTransform;

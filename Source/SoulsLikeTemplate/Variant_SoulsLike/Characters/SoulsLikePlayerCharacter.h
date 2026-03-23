@@ -10,6 +10,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class ULockOnComponent;
 class UInputBufferComponent;
+class UInventoryComponent;
 class UInputAction;
 struct FInputActionValue;
 enum class EBufferedInput : uint8;
@@ -60,6 +61,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> WeaponMeshComponent;
 
+	/** Inventory system */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UInventoryComponent> InventoryComponent;
+
 	// ===== INPUT ACTIONS =====
 
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -91,6 +96,12 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> IA_Zoom;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> IA_Interact;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> IA_ToggleInventory;
 
 	// ===== CAMERA SETTINGS =====
 
@@ -131,6 +142,8 @@ protected:
 	void HandleLockOn();
 	void HandleSwitchTarget(const FInputActionValue& Value);
 	void HandleZoom(const FInputActionValue& Value);
+	void HandleInteract();
+	void HandleToggleInventory();
 
 	/** Called when a buffered input is consumed and should be executed */
 	UFUNCTION()

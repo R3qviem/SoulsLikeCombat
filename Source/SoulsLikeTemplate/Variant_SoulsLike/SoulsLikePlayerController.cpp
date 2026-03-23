@@ -3,6 +3,8 @@
 #include "SoulsLikePlayerController.h"
 #include "SoulsLikeHUD.h"
 #include "SoulsLikePlayerCharacter.h"
+#include "InventoryWidget.h"
+#include "InventoryComponent.h"
 #include "StaminaComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/GameModeBase.h"
@@ -24,6 +26,14 @@ void ASoulsLikePlayerController::BeginPlay()
 		{
 			HUDWidget->AddToViewport();
 		}
+	}
+
+	// Create the inventory widget (hidden by default)
+	InventoryWidget = CreateWidget<UInventoryWidget>(this, UInventoryWidget::StaticClass());
+	if (InventoryWidget)
+	{
+		InventoryWidget->AddToViewport(10);
+		InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
 
@@ -127,5 +137,35 @@ void ASoulsLikePlayerController::OnPlayerStaminaChanged(float NewStaminaPercent)
 	if (HUDWidget)
 	{
 		HUDWidget->SetStaminaPercent(NewStaminaPercent);
+	}
+}
+
+void ASoulsLikePlayerController::ToggleInventory()
+{
+	if (!InventoryWidget)
+	{
+		return;
+	}
+
+	bInventoryOpen = !bInventoryOpen;
+
+	if (bInventoryOpen)
+	{
+		// Refresh with current items
+		ASoulsLikePlayerCharacter* SLCharacter = Cast<ASoulsLikePlayerCharacter>(GetPawn());
+		if (SLCharacter && SLCharacter->InventoryComponent)
+		{
+			InventoryWidget->RefreshInventory(SLCharacter->InventoryComponent->GetItems());
+		}
+
+		InventoryWidget->SetVisibility(ESlateVisibility::Visible);
+		SetInputMode(FInputModeGameAndUI().SetHideCursorDuringCapture(false));
+		SetShowMouseCursor(true);
+	}
+	else
+	{
+		InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+		SetInputMode(FInputModeGameOnly());
+		SetShowMouseCursor(false);
 	}
 }

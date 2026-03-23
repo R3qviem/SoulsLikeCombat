@@ -20,6 +20,10 @@
 #include "UObject/ConstructorHelpers.h"
 #include "WeaponDataAsset.h"
 #include "InputBufferComponent.h"
+#include "InventoryComponent.h"
+#include "ItemPickup.h"
+#include "SoulsLikePlayerController.h"
+#include "Engine/OverlapResult.h"
 
 ASoulsLikePlayerCharacter::ASoulsLikePlayerCharacter()
 {
@@ -146,6 +150,9 @@ ASoulsLikePlayerCharacter::ASoulsLikePlayerCharacter()
 	// Create input buffer component
 	InputBuffer = CreateDefaultSubobject<UInputBufferComponent>(TEXT("InputBuffer"));
 
+	// Create inventory component
+	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
+
 	// Create weapon mesh component attached to weapon socket
 	WeaponMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
 	WeaponMeshComponent->SetupAttachment(GetMesh(), FName("weapon_socket"));
@@ -271,6 +278,16 @@ void ASoulsLikePlayerCharacter::SetupPlayerInputComponent(UInputComponent* Playe
 		IA_Zoom = NewObject<UInputAction>(this, TEXT("IA_Zoom"));
 		IA_Zoom->ValueType = EInputActionValueType::Axis1D;
 	}
+	if (!IA_Interact)
+	{
+		IA_Interact = NewObject<UInputAction>(this, TEXT("IA_Interact"));
+		IA_Interact->ValueType = EInputActionValueType::Boolean;
+	}
+	if (!IA_ToggleInventory)
+	{
+		IA_ToggleInventory = NewObject<UInputAction>(this, TEXT("IA_ToggleInventory"));
+		IA_ToggleInventory->ValueType = EInputActionValueType::Boolean;
+	}
 
 	// Create and register default input mapping context
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -341,6 +358,10 @@ void ASoulsLikePlayerCharacter::SetupPlayerInputComponent(UInputComponent* Playe
 				ScrollDownMapping.Modifiers.Add(Negate);
 			}
 
+			// Interact and inventory
+			IMC->MapKey(IA_Interact, EKeys::F);
+			IMC->MapKey(IA_ToggleInventory, EKeys::I);
+
 			Subsystem->AddMappingContext(IMC, 0);
 		}
 	}
@@ -376,6 +397,10 @@ void ASoulsLikePlayerCharacter::SetupPlayerInputComponent(UInputComponent* Playe
 
 	// Zoom
 	EnhancedInput->BindAction(IA_Zoom, ETriggerEvent::Triggered, this, &ASoulsLikePlayerCharacter::HandleZoom);
+
+	// Interact and inventory
+	EnhancedInput->BindAction(IA_Interact, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleInteract);
+	EnhancedInput->BindAction(IA_ToggleInventory, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleToggleInventory);
 }
 
 // ===== INPUT HANDLERS =====
@@ -635,5 +660,39 @@ void ASoulsLikePlayerCharacter::UpdateMovementOrientation()
 		// Free movement: orient to movement direction
 		CMC->bOrientRotationToMovement = true;
 		bUseControllerRotationYaw = false;
+	}
+}
+
+// ===== INTERACT & INVENTORY =====
+
+void ASoulsLikePlayerCharacter::HandleInteract()
+{
+	if (StateComponent->IsInputBlocked())
+	{
+		return;
+	}
+
+	// Sphere overlap check for nearby pickups
+	TArray<FOverlapResult> Overlaps;
+	FCollisionShape Sphere = FCollisionShape::MakeSphere(150.0f);
+	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_WorldDynamic, Sphere))
+	{
+		for (const FOverlapResult& Overlap : Overlaps)
+		{
+			if (AItemPickup* Pickup = Cast<AItemPickup>(Overlap.GetActor()))
+			{
+				Pickup->PickUp(this);
+				return;
+			}
+		}
+	}
+}
+
+void ASoulsLikePlayerCharacter::HandleToggleInventory()
+{
+	ASoulsLikePlayerController* PC = Cast<ASoulsLikePlayerController>(GetController());
+	if (PC)
+	{
+		PC->ToggleInventory();
 	}
 }
