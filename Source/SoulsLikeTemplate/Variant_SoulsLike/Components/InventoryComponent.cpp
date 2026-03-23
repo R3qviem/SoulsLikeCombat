@@ -6,6 +6,10 @@
 UInventoryComponent::UInventoryComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	for (int32 i = 0; i < NUM_QUICK_SLOTS; ++i)
+	{
+		QuickSlots[i] = nullptr;
+	}
 }
 
 bool UInventoryComponent::AddItem(const UItemDataAsset* ItemData, int32 Count)
@@ -54,7 +58,6 @@ bool UInventoryComponent::RemoveItem(const UItemDataAsset* ItemData, int32 Count
 		return false;
 	}
 
-	// Check if we have enough
 	if (!HasItem(ItemData, Count))
 	{
 		return false;
@@ -99,4 +102,78 @@ bool UInventoryComponent::HasItem(const UItemDataAsset* ItemData, int32 Count) c
 		}
 	}
 	return false;
+}
+
+// ===== QUICK SLOTS =====
+
+void UInventoryComponent::AssignQuickSlot(int32 SlotIndex, const UItemDataAsset* ItemData)
+{
+	if (SlotIndex < 0 || SlotIndex >= NUM_QUICK_SLOTS)
+	{
+		return;
+	}
+	QuickSlots[SlotIndex] = ItemData;
+	OnInventoryChanged.Broadcast();
+}
+
+const UItemDataAsset* UInventoryComponent::GetQuickSlotItem(int32 SlotIndex) const
+{
+	if (SlotIndex < 0 || SlotIndex >= NUM_QUICK_SLOTS)
+	{
+		return nullptr;
+	}
+	return QuickSlots[SlotIndex];
+}
+
+int32 UInventoryComponent::GetQuickSlotCount(int32 SlotIndex) const
+{
+	const UItemDataAsset* SlotItem = GetQuickSlotItem(SlotIndex);
+	if (!SlotItem)
+	{
+		return 0;
+	}
+
+	int32 Total = 0;
+	for (const FInventoryItem& Item : Items)
+	{
+		if (Item.ItemData == SlotItem)
+		{
+			Total += Item.StackCount;
+		}
+	}
+	return Total;
+}
+
+const UItemDataAsset* UInventoryComponent::UseQuickSlot(int32 SlotIndex)
+{
+	const UItemDataAsset* SlotItem = GetQuickSlotItem(SlotIndex);
+	if (!SlotItem || !HasItem(SlotItem, 1))
+	{
+		return nullptr;
+	}
+
+	RemoveItem(SlotItem, 1);
+
+	// If no more of this item, clear the slot
+	if (!HasItem(SlotItem, 1))
+	{
+		QuickSlots[SlotIndex] = nullptr;
+	}
+
+	return SlotItem;
+}
+
+void UInventoryComponent::SetActiveQuickSlot(int32 SlotIndex)
+{
+	if (SlotIndex >= 0 && SlotIndex < NUM_QUICK_SLOTS)
+	{
+		ActiveQuickSlot = SlotIndex;
+		OnInventoryChanged.Broadcast();
+	}
+}
+
+void UInventoryComponent::CycleActiveQuickSlot(int32 Direction)
+{
+	ActiveQuickSlot = (ActiveQuickSlot + Direction + NUM_QUICK_SLOTS) % NUM_QUICK_SLOTS;
+	OnInventoryChanged.Broadcast();
 }

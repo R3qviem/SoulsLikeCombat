@@ -37,4 +37,12 @@ public:
 	/** Maximum stack size (1 = not stackable) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item", meta = (ClampMin = 1))
 	int32 MaxStackSize = 1;
+
+	/** Whether this item can be assigned to the quick slot */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable")
+	bool bIsQuickUsable = false;
+
+	/** Health restored when used (for consumables) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Consumable", meta = (ClampMin = 0, EditCondition = "bIsQuickUsable"))
+	float HealAmount = 0.0f;
 };

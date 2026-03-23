@@ -21,6 +21,7 @@
 #include "WeaponDataAsset.h"
 #include "InputBufferComponent.h"
 #include "InventoryComponent.h"
+#include "ItemDataAsset.h"
 #include "ItemPickup.h"
 #include "SoulsLikePlayerController.h"
 #include "Engine/OverlapResult.h"
@@ -288,6 +289,26 @@ void ASoulsLikePlayerCharacter::SetupPlayerInputComponent(UInputComponent* Playe
 		IA_ToggleInventory = NewObject<UInputAction>(this, TEXT("IA_ToggleInventory"));
 		IA_ToggleInventory->ValueType = EInputActionValueType::Boolean;
 	}
+	if (!IA_QuickSlot1)
+	{
+		IA_QuickSlot1 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot1"));
+		IA_QuickSlot1->ValueType = EInputActionValueType::Boolean;
+	}
+	if (!IA_QuickSlot2)
+	{
+		IA_QuickSlot2 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot2"));
+		IA_QuickSlot2->ValueType = EInputActionValueType::Boolean;
+	}
+	if (!IA_QuickSlot3)
+	{
+		IA_QuickSlot3 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot3"));
+		IA_QuickSlot3->ValueType = EInputActionValueType::Boolean;
+	}
+	if (!IA_QuickSlot4)
+	{
+		IA_QuickSlot4 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot4"));
+		IA_QuickSlot4->ValueType = EInputActionValueType::Boolean;
+	}
 
 	// Create and register default input mapping context
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -362,6 +383,12 @@ void ASoulsLikePlayerCharacter::SetupPlayerInputComponent(UInputComponent* Playe
 			IMC->MapKey(IA_Interact, EKeys::F);
 			IMC->MapKey(IA_ToggleInventory, EKeys::I);
 
+			// Quick slots (1, 2, 3, 4)
+			IMC->MapKey(IA_QuickSlot1, EKeys::One);
+			IMC->MapKey(IA_QuickSlot2, EKeys::Two);
+			IMC->MapKey(IA_QuickSlot3, EKeys::Three);
+			IMC->MapKey(IA_QuickSlot4, EKeys::Four);
+
 			Subsystem->AddMappingContext(IMC, 0);
 		}
 	}
@@ -401,6 +428,12 @@ void ASoulsLikePlayerCharacter::SetupPlayerInputComponent(UInputComponent* Playe
 	// Interact and inventory
 	EnhancedInput->BindAction(IA_Interact, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleInteract);
 	EnhancedInput->BindAction(IA_ToggleInventory, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleToggleInventory);
+
+	// Quick slots (1-4)
+	EnhancedInput->BindAction(IA_QuickSlot1, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleQuickSlot1);
+	EnhancedInput->BindAction(IA_QuickSlot2, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleQuickSlot2);
+	EnhancedInput->BindAction(IA_QuickSlot3, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleQuickSlot3);
+	EnhancedInput->BindAction(IA_QuickSlot4, ETriggerEvent::Started, this, &ASoulsLikePlayerCharacter::HandleQuickSlot4);
 }
 
 // ===== INPUT HANDLERS =====
@@ -682,6 +715,12 @@ void ASoulsLikePlayerCharacter::HandleInteract()
 			if (AItemPickup* Pickup = Cast<AItemPickup>(Overlap.GetActor()))
 			{
 				Pickup->PickUp(this);
+				// Refresh quick item HUD
+				ASoulsLikePlayerController* PC = Cast<ASoulsLikePlayerController>(GetController());
+				if (PC)
+				{
+					PC->RefreshQuickItemHUD();
+				}
 				return;
 			}
 		}
@@ -694,5 +733,39 @@ void ASoulsLikePlayerCharacter::HandleToggleInventory()
 	if (PC)
 	{
 		PC->ToggleInventory();
+	}
+}
+
+void ASoulsLikePlayerCharacter::HandleQuickSlot(int32 SlotIndex)
+{
+	if (StateComponent->IsInputBlocked())
+	{
+		return;
+	}
+
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	// Set this as the active slot and use it
+	InventoryComponent->SetActiveQuickSlot(SlotIndex);
+
+	const UItemDataAsset* UsedItem = InventoryComponent->UseQuickSlot(SlotIndex);
+	if (UsedItem)
+	{
+		// Apply item effects
+		if (UsedItem->HealAmount > 0.0f)
+		{
+			CurrentHealth = FMath::Min(CurrentHealth + UsedItem->HealAmount, MaxHealth);
+			OnHealthChanged.Broadcast(GetHealthPercent());
+		}
+	}
+
+	// Refresh the quick item HUD
+	ASoulsLikePlayerController* PC = Cast<ASoulsLikePlayerController>(GetController());
+	if (PC)
+	{
+		PC->RefreshQuickItemHUD();
 	}
 }

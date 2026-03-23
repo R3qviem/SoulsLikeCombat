@@ -4,7 +4,9 @@
 #include "SoulsLikeHUD.h"
 #include "SoulsLikePlayerCharacter.h"
 #include "InventoryWidget.h"
+#include "QuickItemWidget.h"
 #include "InventoryComponent.h"
+#include "ItemDataAsset.h"
 #include "StaminaComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/GameModeBase.h"
@@ -34,6 +36,13 @@ void ASoulsLikePlayerController::BeginPlay()
 	{
 		InventoryWidget->AddToViewport(10);
 		InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	// Create the quick item HUD (always visible, bottom-left)
+	QuickItemWidget = CreateWidget<UQuickItemWidget>(this, UQuickItemWidget::StaticClass());
+	if (QuickItemWidget)
+	{
+		QuickItemWidget->AddToViewport(5);
 	}
 }
 
@@ -140,6 +149,43 @@ void ASoulsLikePlayerController::OnPlayerStaminaChanged(float NewStaminaPercent)
 	}
 }
 
+void ASoulsLikePlayerController::RefreshQuickItemHUD()
+{
+	if (!QuickItemWidget)
+	{
+		return;
+	}
+
+	ASoulsLikePlayerCharacter* SLChar = Cast<ASoulsLikePlayerCharacter>(GetPawn());
+	if (!SLChar || !SLChar->InventoryComponent)
+	{
+		for (int32 i = 0; i < NUM_QUICK_SLOTS; ++i)
+		{
+			QuickItemWidget->ClearSlot(i);
+		}
+		return;
+	}
+
+	UInventoryComponent* InvComp = SLChar->InventoryComponent;
+
+	// Update all 4 quick slots
+	for (int32 i = 0; i < NUM_QUICK_SLOTS; ++i)
+	{
+		const UItemDataAsset* SlotItem = InvComp->GetQuickSlotItem(i);
+		if (SlotItem)
+		{
+			QuickItemWidget->SetSlot(i, SlotItem->ItemName, InvComp->GetQuickSlotCount(i), SlotItem->ItemIcon);
+		}
+		else
+		{
+			QuickItemWidget->ClearSlot(i);
+		}
+	}
+
+	// Highlight the active slot
+	QuickItemWidget->SetActiveSlot(InvComp->GetActiveQuickSlot());
+}
+
 void ASoulsLikePlayerController::ToggleInventory()
 {
 	if (!InventoryWidget)
@@ -151,21 +197,27 @@ void ASoulsLikePlayerController::ToggleInventory()
 
 	if (bInventoryOpen)
 	{
-		// Refresh with current items
+		// Refresh with current items and pass inventory component reference
 		ASoulsLikePlayerCharacter* SLCharacter = Cast<ASoulsLikePlayerCharacter>(GetPawn());
 		if (SLCharacter && SLCharacter->InventoryComponent)
 		{
+			InventoryWidget->SetInventoryComponent(SLCharacter->InventoryComponent);
 			InventoryWidget->RefreshInventory(SLCharacter->InventoryComponent->GetItems());
 		}
 
 		InventoryWidget->SetVisibility(ESlateVisibility::Visible);
+		InventoryWidget->PlayOpenAnimation();
 		SetInputMode(FInputModeGameAndUI().SetHideCursorDuringCapture(false));
 		SetShowMouseCursor(true);
 	}
 	else
 	{
+		InventoryWidget->PlayCloseAnimation();
 		InventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
 		SetInputMode(FInputModeGameOnly());
 		SetShowMouseCursor(false);
+
+		// Refresh quick item HUD in case slots were assigned
+		RefreshQuickItemHUD();
 	}
 }

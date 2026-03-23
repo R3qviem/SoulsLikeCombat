@@ -9,6 +9,7 @@
 class UInputMappingContext;
 class USoulsLikeHUD;
 class UInventoryWidget;
+class UQuickItemWidget;
 class ASoulsLikePlayerCharacter;
 
 /**
@@ -40,6 +41,9 @@ public:
 	/** Toggle inventory UI visibility */
 	void ToggleInventory();
 
+	/** Refresh the quick item HUD display */
+	void RefreshQuickItemHUD();
+
 protected:
 
 	/** Input mapping contexts to apply by default */
@@ -57,6 +61,10 @@ protected:
 	/** Inventory widget */
 	UPROPERTY()
 	TObjectPtr<UInventoryWidget> InventoryWidget;
+
+	/** Quick item HUD (bottom-left) */
+	UPROPERTY()
+	TObjectPtr<UQuickItemWidget> QuickItemWidget;
 
 	bool bInventoryOpen = false;
 

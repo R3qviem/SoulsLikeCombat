@@ -103,6 +103,18 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	TObjectPtr<UInputAction> IA_ToggleInventory;
 
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> IA_QuickSlot1;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> IA_QuickSlot2;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> IA_QuickSlot3;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	TObjectPtr<UInputAction> IA_QuickSlot4;
+
 	// ===== CAMERA SETTINGS =====
 
 	/** Minimum zoom distance (closest) */
@@ -144,6 +156,11 @@ protected:
 	void HandleZoom(const FInputActionValue& Value);
 	void HandleInteract();
 	void HandleToggleInventory();
+	void HandleQuickSlot(int32 SlotIndex);
+	void HandleQuickSlot1() { HandleQuickSlot(0); }
+	void HandleQuickSlot2() { HandleQuickSlot(1); }
+	void HandleQuickSlot3() { HandleQuickSlot(2); }
+	void HandleQuickSlot4() { HandleQuickSlot(3); }
 
 	/** Called when a buffered input is consumed and should be executed */
 	UFUNCTION()

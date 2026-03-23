@@ -175,7 +175,18 @@ enum class EItemType : uint8
 	Material,
 	KeyItem,
 	Weapon,
-	Equipment
+	Armor
+};
+
+/** Equipment slot on the character */
+UENUM(BlueprintType)
+enum class EEquipmentSlot : uint8
+{
+	Head,
+	Chest,
+	Legs,
+	MainHand,
+	OffHand
 };
 
 /** A single inventory entry (item + stack count) */
