@@ -102,7 +102,7 @@ struct FComboAttack
 
 	/** Trace distance ahead of the character */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attack", meta = (ClampMin = 10, Units = "cm"))
-	float TraceDistance = 100.0f;
+	float TraceDistance = 180.0f;
 };
 
 /** Complete information about a damage event */

@@ -12,7 +12,7 @@ class UStateTreeAIComponent;
  *  AI Controller for Souls-Like enemies.
  *  Runs behavior through the StateTree AI Component.
  */
-UCLASS(abstract)
+UCLASS()
 class ASoulsLikeAIController : public AAIController
 {
 	GENERATED_BODY()

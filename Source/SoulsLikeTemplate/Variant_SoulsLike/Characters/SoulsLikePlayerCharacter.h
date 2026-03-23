@@ -56,6 +56,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInputBufferComponent> InputBuffer;
 
+	/** Weapon mesh attached to the character's hand */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UStaticMeshComponent> WeaponMeshComponent;
+
 	// ===== INPUT ACTIONS =====
 
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -138,6 +142,9 @@ protected:
 
 	/** Override to consume input buffer when action ends */
 	virtual void OnActionEnd() override;
+
+	/** Override to disable input on death */
+	virtual void HandleDeath() override;
 
 	/** Cached last move input for dodge direction */
 	FVector2D LastMoveInput = FVector2D::ZeroVector;

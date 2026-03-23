@@ -8,6 +8,8 @@
 
 class UWidgetComponent;
 class USoulsLikeEnemyHealthBar;
+class AAIController;
+class UPointLightComponent;
 
 /** Completed attack animation delegate for StateTree */
 DECLARE_DELEGATE(FOnSLEnemyAttackCompleted);
@@ -18,10 +20,21 @@ DECLARE_DELEGATE(FOnSLEnemyLanded);
 /** Enemy died delegate */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSLEnemyDied);
 
+/** Simple AI behavior states */
+UENUM()
+enum class EEnemyAIState : uint8
+{
+	Idle,
+	Patrol,
+	Chase,
+	Attack,
+	CooldownAfterAttack,
+	Dead
+};
+
 /**
  *  Base enemy class for the Souls-Like system.
- *  Provides AI hooks, danger tracking, death removal, and StateTree delegates.
- *  Derive from this class (C++ or Blueprint) to create specific enemy types.
+ *  Has built-in AI behavior: patrol, detect player, chase, attack.
  */
 UCLASS()
 class ASoulsLikeBaseEnemy : public ASoulsLikeBaseCharacter
@@ -33,6 +46,8 @@ public:
 	/** Constructor */
 	ASoulsLikeBaseEnemy();
 
+	virtual void Tick(float DeltaTime) override;
+
 protected:
 
 	virtual void BeginPlay() override;
@@ -42,10 +57,6 @@ public:
 
 	// ===== AI ATTACK =====
 
-	/**
-	 * AI-initiated attack. Picks a random combo length up to MaxComboCount.
-	 * Plays the montage and auto-advances combo for AI.
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void DoAIAttack(EAttackType AttackType, int32 MaxComboCount);
 
@@ -56,81 +67,165 @@ public:
 
 	// ===== DAMAGE OVERRIDES =====
 
+	virtual void ProcessDamage(FDamageInfo DamageInfo) override;
 	virtual void HandleDeath() override;
 
 	// ===== LANDING =====
 
 	virtual void Landed(const FHitResult& Hit) override;
 
-	// ===== DANGER TRACKING =====
+	// ===== UI =====
 
-	/** Show the health bar (called when targeted by lock-on) */
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void ShowHealthBar();
 
-	/** Hide the health bar (called when lock-on releases) */
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void HideHealthBar();
 
-	/** Record an incoming danger source for AI reaction */
+	// ===== DANGER TRACKING =====
+
 	UFUNCTION(BlueprintCallable, Category = "AI")
 	void NotifyOfDanger(const FVector& Location, AActor* Source);
 
-	/** Get the last recorded danger location */
 	UFUNCTION(BlueprintPure, Category = "AI")
 	const FVector& GetLastDangerLocation() const { return LastDangerLocation; }
 
-	/** Get the last game time a danger event was received */
 	UFUNCTION(BlueprintPure, Category = "AI")
 	float GetLastDangerTime() const { return LastDangerTime; }
 
 	// ===== DELEGATES =====
 
-	/** Attack completed delegate for StateTree tasks */
 	FOnSLEnemyAttackCompleted OnAttackCompleted;
-
-	/** Landed delegate for StateTree tasks */
 	FOnSLEnemyLanded OnEnemyLanded;
 
-	/** Enemy died delegate. Allows external subscribers (spawners, level scripts) to respond. */
 	UPROPERTY(BlueprintAssignable, Category = "Events")
 	FOnSLEnemyDied OnEnemyDied;
 
 protected:
 
-	/** Health bar widget component */
+	// ===== COMPONENTS =====
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UWidgetComponent> HealthBarWidget;
 
-	/** Pointer to the health bar widget instance */
+	/** Red glow light for lock-on indicator (attached to chest) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UPointLightComponent> LockOnIndicatorLight;
+
 	UPROPERTY()
 	TObjectPtr<USoulsLikeEnemyHealthBar> HealthBarInstance;
 
-	/** Time to wait before removing this character from the level after death */
+	// ===== DEATH =====
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Death", meta = (ClampMin = 0, Units = "s"))
 	float DeathRemovalTime = 5.0f;
 
-	/** Target number of attacks in the current AI combo */
-	int32 AITargetComboCount = 0;
+	// ===== AI COMBAT STATE =====
 
-	/** Current position in the AI combo */
+	int32 AITargetComboCount = 0;
 	int32 AICurrentComboAttack = 0;
+
+	// ===== AI BEHAVIOR SETTINGS =====
+
+	/** How far the enemy can see the player */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 100, Units = "cm"))
+	float SightRange = 1200.0f;
+
+	/** Field of view half-angle for detection (degrees) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 10, ClampMax = 180, Units = "deg"))
+	float SightAngle = 70.0f;
+
+	/** Distance at which the enemy will attack */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 50, Units = "cm"))
+	float AttackRange = 200.0f;
+
+	/** Max cooldown between attacks (actual is randomized shorter) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 0.1, Units = "s"))
+	float AttackCooldown = 1.8f;
+
+	/** Patrol radius around spawn point */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 100, Units = "cm"))
+	float PatrolRadius = 500.0f;
+
+	/** Time to wait at each patrol point */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 0.5, Units = "s"))
+	float PatrolWaitTime = 3.0f;
+
+	/** Walk speed while patrolling */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 50, Units = "cm/s"))
+	float PatrolSpeed = 150.0f;
+
+	/** Run speed while chasing */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 100, Units = "cm/s"))
+	float ChaseSpeed = 420.0f;
+
+	/** Distance at which the enemy loses the player and returns to patrol */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 500, Units = "cm"))
+	float LosePlayerDistance = 2000.0f;
 
 private:
 
-	/** Death removal timer handle */
+	// ===== AI STATE =====
+
+	EEnemyAIState AIState = EEnemyAIState::Idle;
+
+	/** Spawn location for patrol origin */
+	FVector SpawnLocation = FVector::ZeroVector;
+
+	/** Current patrol destination */
+	FVector PatrolTarget = FVector::ZeroVector;
+
+	/** Cached player character reference */
+	UPROPERTY()
+	TObjectPtr<ACharacter> PlayerCharacter;
+
+	/** AI Controller reference */
+	UPROPERTY()
+	TObjectPtr<AAIController> AIControllerRef;
+
+	/** Timer for patrol wait */
+	FTimerHandle PatrolWaitTimer;
+
+	/** Timer for attack cooldown */
+	FTimerHandle AttackCooldownTimer;
+
+	/** Whether currently waiting at a patrol point */
+	bool bIsWaitingAtPatrol = false;
+
+	/** Whether currently moving to patrol point */
+	bool bIsMovingToPatrol = false;
+
+	/** Circle-strafe direction (-1 or 1), randomized per cooldown */
+	float StrafeDirection = 1.0f;
+
+	// ===== AI BEHAVIOR =====
+
+	void AITick_Idle(float DeltaTime);
+	void AITick_Patrol(float DeltaTime);
+	void AITick_Chase(float DeltaTime);
+	void AITick_Attack(float DeltaTime);
+	void AITick_Cooldown(float DeltaTime);
+
+	/** Check if the player is visible (in range + in sight cone + alive) */
+	bool CanSeePlayer() const;
+
+	/** Pick a random patrol point near spawn */
+	FVector PickPatrolPoint() const;
+
+	/** Transition to a new AI state */
+	void SetAIState(EEnemyAIState NewState);
+
+	/** Check if player reference is valid and alive */
+	bool IsPlayerValid() const;
+
+	// ===== EXISTING =====
+
 	FTimerHandle DeathTimer;
-
-	/** Last recorded danger location */
 	FVector LastDangerLocation = FVector::ZeroVector;
-
-	/** Last recorded game time a danger was detected */
 	float LastDangerTime = -1000.0f;
 
-	/** Remove this character from the level */
 	void RemoveFromLevel();
 
-	/** Health bar update callback bound to OnHealthChanged */
 	UFUNCTION()
 	void OnHealthBarUpdate(float NewHealthPercent);
 };

@@ -66,15 +66,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	TObjectPtr<UWeaponDataAsset> UnarmedWeaponData;
 
+	/** Socket on the skeletal mesh for weapon attachment */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
+	FName WeaponSocketName = FName("weapon_r");
+
 protected:
 
 	/** Blueprint-configurable list of weapon classes the character can switch between */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
 	TArray<TSubclassOf<AWeaponBase>> WeaponInventory;
-
-	/** Socket on the skeletal mesh for weapon attachment */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon")
-	FName WeaponSocketName = FName("weapon_r");
 
 	/** Index of the currently equipped weapon in the inventory */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")

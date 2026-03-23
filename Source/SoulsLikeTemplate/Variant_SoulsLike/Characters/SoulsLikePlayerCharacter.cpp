@@ -16,6 +16,7 @@
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "WeaponDataAsset.h"
 #include "InputBufferComponent.h"
@@ -43,54 +44,83 @@ ASoulsLikePlayerCharacter::ASoulsLikePlayerCharacter()
 		GetMesh()->SetAnimInstanceClass(AnimBPFinder.Class);
 	}
 
-	// Create default unarmed weapon data with existing combat montages
+	// Default greatsword weapon data (can be overridden in the editor via WeaponManager->UnarmedWeaponData)
 	{
-		UWeaponDataAsset* UnarmedData = CreateDefaultSubobject<UWeaponDataAsset>(TEXT("DefaultUnarmedData"));
-		UnarmedData->WeaponName = FText::FromString(TEXT("Unarmed"));
-		UnarmedData->WeaponType = EWeaponType::Unarmed;
-		UnarmedData->BaseDamage = 15.0f;
-		UnarmedData->DodgeStaminaCost = 20.0f;
+		UWeaponDataAsset* GreatswordData = CreateDefaultSubobject<UWeaponDataAsset>(TEXT("DefaultGreatswordData"));
+		GreatswordData->WeaponName = FText::FromString(TEXT("Moon Sword"));
+		GreatswordData->WeaponType = EWeaponType::Greatsword;
+		GreatswordData->BaseDamage = 25.0f;
+		GreatswordData->DodgeStaminaCost = 20.0f;
 
-		// Load existing montages from the project
-		static ConstructorHelpers::FObjectFinder<UAnimMontage> ComboMontageFinder(
-			TEXT("/Game/Variant_Combat/Anims/AM_ComboAttack.AM_ComboAttack"));
-		static ConstructorHelpers::FObjectFinder<UAnimMontage> ChargedMontageFinder(
-			TEXT("/Game/Variant_Combat/Anims/AM_ChargedAttack.AM_ChargedAttack"));
-		static ConstructorHelpers::FObjectFinder<UAnimMontage> DashMontageFinder(
-			TEXT("/Game/Variant_Platforming/Anims/AM_Dash.AM_Dash"));
+		// Load greatsword combo montage
+		static ConstructorHelpers::FObjectFinder<UAnimMontage> SwordComboMontageFinder(
+			TEXT("/Game/Animations/AttackSword/SwordAttackCombo_Montage.SwordAttackCombo_Montage"));
 
-		if (ComboMontageFinder.Succeeded())
+		if (SwordComboMontageFinder.Succeeded())
 		{
-			UnarmedData->LightAttackMontage.AttackMontage = ComboMontageFinder.Object;
-		}
-		if (ChargedMontageFinder.Succeeded())
-		{
-			UnarmedData->HeavyAttackMontage.AttackMontage = ChargedMontageFinder.Object;
-		}
-		if (DashMontageFinder.Succeeded())
-		{
-			UnarmedData->DodgeMontage = DashMontageFinder.Object;
+			GreatswordData->LightAttackMontage.AttackMontage = SwordComboMontageFinder.Object;
+			GreatswordData->LightAttackMontage.PlayRate = 1.6f;
+			GreatswordData->HeavyAttackMontage.AttackMontage = SwordComboMontageFinder.Object;
+			GreatswordData->HeavyAttackMontage.PlayRate = 1.6f;
 		}
 
-		// Light combo chain (single attack, plays montage from start)
-		FComboAttack LightAttack;
-		LightAttack.MontageSectionName = NAME_None;
-		LightAttack.DamageMultiplier = 1.0f;
-		LightAttack.StaminaCost = 15.0f;
-		LightAttack.HitReaction = EHitReactionType::Light;
-		UnarmedData->LightComboChain.Add(LightAttack);
+		// Load sword mesh
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> SwordMeshFinder(
+			TEXT("/Game/Fab/Moon_Sword/moon_sword/StaticMeshes/moon_sword.moon_sword"));
+		if (SwordMeshFinder.Succeeded())
+		{
+			GreatswordData->WeaponMesh = SwordMeshFinder.Object;
+		}
 
-		// Heavy combo chain (single attack, more damage)
+		// Light combo chain — 3 hits using montage sections
+		FComboAttack LightAttack1;
+		LightAttack1.MontageSectionName = NAME_None; // Default section = first attack
+		LightAttack1.DamageMultiplier = 1.0f;
+		LightAttack1.StaminaCost = 15.0f;
+		LightAttack1.HitReaction = EHitReactionType::Light;
+		GreatswordData->LightComboChain.Add(LightAttack1);
+
+		FComboAttack LightAttack2;
+		LightAttack2.MontageSectionName = FName("Attack2");
+		LightAttack2.DamageMultiplier = 1.2f;
+		LightAttack2.StaminaCost = 18.0f;
+		LightAttack2.HitReaction = EHitReactionType::Light;
+		GreatswordData->LightComboChain.Add(LightAttack2);
+
+		FComboAttack LightAttack3;
+		LightAttack3.MontageSectionName = FName("Attack3");
+		LightAttack3.DamageMultiplier = 1.5f;
+		LightAttack3.StaminaCost = 22.0f;
+		LightAttack3.HitReaction = EHitReactionType::Heavy;
+		LightAttack3.KnockbackImpulse = 300.0f;
+		GreatswordData->LightComboChain.Add(LightAttack3);
+
+		// Heavy combo — single powerful strike
 		FComboAttack HeavyAttack;
 		HeavyAttack.MontageSectionName = NAME_None;
-		HeavyAttack.DamageMultiplier = 2.0f;
-		HeavyAttack.StaminaCost = 30.0f;
+		HeavyAttack.DamageMultiplier = 2.5f;
+		HeavyAttack.StaminaCost = 35.0f;
 		HeavyAttack.HitReaction = EHitReactionType::Heavy;
-		HeavyAttack.KnockbackImpulse = 400.0f;
-		UnarmedData->HeavyComboChain.Add(HeavyAttack);
+		HeavyAttack.KnockbackImpulse = 500.0f;
+		GreatswordData->HeavyComboChain.Add(HeavyAttack);
 
-		WeaponManager->UnarmedWeaponData = UnarmedData;
+		WeaponManager->UnarmedWeaponData = GreatswordData;
 	}
+
+	// Load directional dodge montages
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> DodgeFMontage(
+		TEXT("/Game/Animations/Dodge_F_Montage.Dodge_F_Montage"));
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> DodgeBMontage(
+		TEXT("/Game/Animations/Dodge_B_Montage.Dodge_B_Montage"));
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> DodgeLMontage(
+		TEXT("/Game/Animations/Dodge_L_Montage.Dodge_L_Montage"));
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> DodgeRMontage(
+		TEXT("/Game/Animations/Dodge_R_Montage.Dodge_R_Montage"));
+
+	if (DodgeFMontage.Succeeded()) { DodgeForwardMontage = DodgeFMontage.Object; }
+	if (DodgeBMontage.Succeeded()) { DodgeBackMontage = DodgeBMontage.Object; }
+	if (DodgeLMontage.Succeeded()) { DodgeLeftMontage = DodgeLMontage.Object; }
+	if (DodgeRMontage.Succeeded()) { DodgeRightMontage = DodgeRMontage.Object; }
 
 	// Create camera boom — same as 3rd person but higher angle
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -116,6 +146,25 @@ ASoulsLikePlayerCharacter::ASoulsLikePlayerCharacter()
 	// Create input buffer component
 	InputBuffer = CreateDefaultSubobject<UInputBufferComponent>(TEXT("InputBuffer"));
 
+	// Create weapon mesh component attached to weapon socket
+	WeaponMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
+	WeaponMeshComponent->SetupAttachment(GetMesh(), FName("weapon_socket"));
+	WeaponMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Set default sword mesh and transform
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SwordMeshFinder(
+		TEXT("/Game/Fab/Moon_Sword/moon_sword/StaticMeshes/moon_sword.moon_sword"));
+	if (SwordMeshFinder.Succeeded())
+	{
+		WeaponMeshComponent->SetStaticMesh(SwordMeshFinder.Object);
+		WeaponMeshComponent->SetRelativeLocation(FVector(-10.0f, -17.1f, 47.0f));
+		WeaponMeshComponent->SetRelativeRotation(FRotator(0.0f, 0.0f, -110.0f));
+		WeaponMeshComponent->SetRelativeScale3D(FVector(0.2f, 0.2f, 0.2f));
+	}
+
+	// Default socket name
+	WeaponManager->WeaponSocketName = FName("weapon_socket");
+
 	// Player tag
 	Tags.Add(FName("Player"));
 }
@@ -129,6 +178,8 @@ void ASoulsLikePlayerCharacter::BeginPlay()
 	{
 		PC->SetControlRotation(FRotator(-55.0f, PC->GetControlRotation().Yaw, 0.0f));
 	}
+
+	// Weapon mesh is attached via SetupAttachment in constructor — BP transform overrides apply automatically
 
 	// Bind the input buffer delegate
 	InputBuffer->OnBufferedInputConsumed.AddDynamic(this, &ASoulsLikePlayerCharacter::OnBufferedInputConsumed);
@@ -499,6 +550,24 @@ void ASoulsLikePlayerCharacter::OnActionEnd()
 {
 	Super::OnActionEnd();
 	// Buffer consumption happens in OnStateChangedHandler when state transitions to Idle
+}
+
+void ASoulsLikePlayerCharacter::HandleDeath()
+{
+	// Release lock-on before dying
+	if (LockOnComponent->IsLockedOn())
+	{
+		LockOnComponent->ToggleLockOn();
+	}
+
+	// Call base death (animation, ragdoll, etc.)
+	ASoulsLikeBaseCharacter::HandleDeath();
+
+	// Disable player input
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		DisableInput(PC);
+	}
 }
 
 void ASoulsLikePlayerCharacter::OnStateChangedHandler(ECharacterState NewState)

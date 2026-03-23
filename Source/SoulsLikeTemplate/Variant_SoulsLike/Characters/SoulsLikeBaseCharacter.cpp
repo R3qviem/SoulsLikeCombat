@@ -172,47 +172,55 @@ void ASoulsLikeBaseCharacter::AttemptDodge(FVector2D InputDirection)
 		return;
 	}
 
-	// Calculate dodge direction FIRST (needed for rotation before montage)
-	FVector DodgeDirection;
+	// Determine dodge direction relative to character facing to pick the right montage
+	// Convert input to local space: X = forward/back, Y = left/right
+	FVector2D LocalDir;
 	if (InputDirection.IsNearlyZero())
 	{
-		// Default: dodge backward relative to actor facing
-		DodgeDirection = -GetActorForwardVector();
+		// No input: dodge backward
+		LocalDir = FVector2D(0.0f, -1.0f);
 	}
 	else
 	{
-		// Dodge in the input direction relative to controller
+		// Convert camera-relative input to world direction
+		FVector WorldDodgeDir;
 		if (GetController())
 		{
 			const FRotator YawRotation(0, GetController()->GetControlRotation().Yaw, 0);
 			const FVector ForwardDir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 			const FVector RightDir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-			DodgeDirection = (ForwardDir * InputDirection.Y + RightDir * InputDirection.X).GetSafeNormal();
+			WorldDodgeDir = (ForwardDir * InputDirection.Y + RightDir * InputDirection.X).GetSafeNormal();
 		}
 		else
 		{
-			DodgeDirection = -GetActorForwardVector();
+			WorldDodgeDir = GetActorForwardVector();
 		}
+
+		// Project world direction onto character's local axes
+		const FVector ActorForward = GetActorForwardVector().GetSafeNormal2D();
+		const FVector ActorRight = GetActorRightVector().GetSafeNormal2D();
+		LocalDir.X = FVector::DotProduct(WorldDodgeDir, ActorRight);   // positive = right
+		LocalDir.Y = FVector::DotProduct(WorldDodgeDir, ActorForward); // positive = forward
 	}
 
-	// Temporarily disable rotation overrides so SetActorRotation isn't overridden by CMC
+	// Pick directional montage based on dominant axis
+	UAnimMontage* DodgeMontageToPlay = nullptr;
+	if (FMath::Abs(LocalDir.Y) >= FMath::Abs(LocalDir.X))
+	{
+		// Forward or backward dominant
+		DodgeMontageToPlay = (LocalDir.Y >= 0.0f) ? DodgeForwardMontage : DodgeBackMontage;
+	}
+	else
+	{
+		// Left or right dominant
+		DodgeMontageToPlay = (LocalDir.X >= 0.0f) ? DodgeRightMontage : DodgeLeftMontage;
+	}
+
+	// Temporarily disable rotation overrides during dodge
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	bUseControllerRotationYaw = false;
 
-	// Rotate character to face dodge direction BEFORE montage plays
-	// This way root motion carries the character in the correct direction
-	if (!DodgeDirection.IsNearlyZero())
-	{
-		SetActorRotation(DodgeDirection.Rotation());
-	}
-
-	// Play dodge montage
-	UAnimMontage* DodgeMontageToPlay = nullptr;
-	if (WeaponData)
-	{
-		DodgeMontageToPlay = WeaponData->DodgeMontage;
-	}
-
+	// Play the directional dodge montage — root motion drives the movement
 	bool bMontagePlayed = false;
 	if (DodgeMontageToPlay)
 	{
@@ -227,10 +235,12 @@ void ASoulsLikeBaseCharacter::AttemptDodge(FVector2D InputDirection)
 		}
 	}
 
-	// If no montage played, schedule state recovery via timer and use impulse instead
+	// Fallback: if no montage played, use impulse
 	if (!bMontagePlayed)
 	{
-		LaunchCharacter(DodgeDirection * DodgeImpulse, true, false);
+		FVector DodgeDir = GetActorForwardVector() * LocalDir.Y + GetActorRightVector() * LocalDir.X;
+		DodgeDir.Normalize();
+		LaunchCharacter(DodgeDir * DodgeImpulse, true, false);
 
 		GetWorld()->GetTimerManager().SetTimer(DodgeRecoveryTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
 		{
@@ -239,7 +249,7 @@ void ASoulsLikeBaseCharacter::AttemptDodge(FVector2D InputDirection)
 			{
 				StateComponent->ForceState(ECharacterState::Idle);
 			}
-		}), 0.5f, false);
+		}), 0.4f, false);
 	}
 }
 
@@ -478,9 +488,7 @@ void ASoulsLikeBaseCharacter::ExecuteAttackTrace(FName SourceBone)
 	const FVector TraceStart = GetMesh()->GetSocketLocation(SourceBone);
 	const FVector TraceEnd = TraceStart + (GetActorForwardVector() * AttackData->TraceDistance);
 
-	// Debug draw: show attack trace sphere sweep
-	DrawDebugSphere(GetWorld(), TraceStart, AttackData->TraceRadius, 12, FColor::Yellow, false, 1.0f);
-	DrawDebugSphere(GetWorld(), TraceEnd, AttackData->TraceRadius, 12, FColor::Yellow, false, 1.0f);
+	// Debug draw: show attack trace line only
 	DrawDebugLine(GetWorld(), TraceStart, TraceEnd, FColor::Yellow, false, 1.0f, 0, 2.0f);
 
 	FCollisionObjectQueryParams ObjectParams;
@@ -517,9 +525,6 @@ void ASoulsLikeBaseCharacter::ExecuteAttackTrace(FName SourceBone)
 			}
 
 			HitActorsThisSwing.Add(HitActor);
-
-			// Debug draw: hit confirmation
-			DrawDebugSphere(GetWorld(), Hit.ImpactPoint, 15.0f, 8, FColor::Green, false, 1.5f);
 
 			// Build the damage info
 			FDamageInfo DamageInfoToSend;

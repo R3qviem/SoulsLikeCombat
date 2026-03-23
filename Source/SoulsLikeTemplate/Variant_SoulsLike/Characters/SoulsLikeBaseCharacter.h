@@ -246,9 +246,22 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Charged")
 	FName ChargeAttackSection = FName("Attack");
 
-	/** Dodge impulse strength */
+	/** Dodge impulse strength (fallback when no montage) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Dodge", meta = (ClampMin = 0, Units = "cm/s"))
-	float DodgeImpulse = 800.0f;
+	float DodgeImpulse = 400.0f;
+
+	/** Directional dodge montages (root motion drives movement) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Dodge")
+	TObjectPtr<UAnimMontage> DodgeForwardMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Dodge")
+	TObjectPtr<UAnimMontage> DodgeBackMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Dodge")
+	TObjectPtr<UAnimMontage> DodgeLeftMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Dodge")
+	TObjectPtr<UAnimMontage> DodgeRightMontage;
 
 	/** Max distance to detect finisher targets */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|Finisher", meta = (ClampMin = 50, Units = "cm"))
