@@ -11,6 +11,20 @@ class USoulsLikeHUD;
 class UInventoryWidget;
 class UQuickItemWidget;
 class ASoulsLikePlayerCharacter;
+class ASoulsLikeBaseEnemy;
+class ULevelUpWidget;
+
+/** Stores original spawn data for an enemy so it can be respawned */
+USTRUCT()
+struct FEnemySpawnRecord
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TSubclassOf<ASoulsLikeBaseEnemy> EnemyClass;
+
+	FTransform SpawnTransform;
+};
 
 /**
  *  PlayerController for the Souls-Like game mode.
@@ -44,6 +58,12 @@ public:
 	/** Refresh the quick item HUD display */
 	void RefreshQuickItemHUD();
 
+	/** Destroy all enemies and respawn them from saved spawn records */
+	void RespawnAllEnemies();
+
+	/** Show the level up menu (bonfire rest) */
+	void ShowLevelUpMenu();
+
 protected:
 
 	/** Input mapping contexts to apply by default */
@@ -66,7 +86,14 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UQuickItemWidget> QuickItemWidget;
 
+	/** Level up menu widget */
+	UPROPERTY()
+	TObjectPtr<ULevelUpWidget> LevelUpWidget;
+
 	bool bInventoryOpen = false;
+
+	/** Whether a checkpoint has been set (prevents overwriting on respawn) */
+	bool bHasCheckpoint = false;
 
 	/** Transform where the player will respawn */
 	FTransform RespawnTransform;
@@ -97,4 +124,10 @@ private:
 	/** Wrapper for stamina delegate -> HUD update */
 	UFUNCTION()
 	void OnPlayerStaminaChanged(float NewStaminaPercent);
+
+	/** Record all enemies in the world at level start */
+	void RecordEnemySpawnData();
+
+	/** Saved enemy spawn records for respawning on bonfire rest */
+	TArray<FEnemySpawnRecord> EnemySpawnRecords;
 };

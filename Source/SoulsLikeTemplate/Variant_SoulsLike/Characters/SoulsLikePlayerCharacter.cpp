@@ -23,8 +23,10 @@
 #include "InventoryComponent.h"
 #include "ItemDataAsset.h"
 #include "ItemPickup.h"
+#include "BonfireCheckpoint.h"
 #include "SoulsLikePlayerController.h"
 #include "Engine/OverlapResult.h"
+#include "EngineUtils.h"
 
 ASoulsLikePlayerCharacter::ASoulsLikePlayerCharacter()
 {
@@ -228,87 +230,58 @@ void ASoulsLikePlayerCharacter::SetupPlayerInputComponent(UInputComponent* Playe
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	// Create default input actions if not already assigned (allows Blueprint override)
-	if (!IA_Move)
+	if (GEngine)
 	{
-		IA_Move = NewObject<UInputAction>(this, TEXT("IA_Move"));
-		IA_Move->ValueType = EInputActionValueType::Axis2D;
+		GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("SetupPlayerInputComponent CALLED!"));
 	}
-	if (!IA_Look)
-	{
-		IA_Look = NewObject<UInputAction>(this, TEXT("IA_Look"));
-		IA_Look->ValueType = EInputActionValueType::Axis2D;
-	}
-	if (!IA_MouseLook)
-	{
-		IA_MouseLook = NewObject<UInputAction>(this, TEXT("IA_MouseLook"));
-		IA_MouseLook->ValueType = EInputActionValueType::Axis2D;
-	}
-	if (!IA_LightAttack)
-	{
-		IA_LightAttack = NewObject<UInputAction>(this, TEXT("IA_LightAttack"));
-		IA_LightAttack->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_HeavyAttack)
-	{
-		IA_HeavyAttack = NewObject<UInputAction>(this, TEXT("IA_HeavyAttack"));
-		IA_HeavyAttack->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_Dodge)
-	{
-		IA_Dodge = NewObject<UInputAction>(this, TEXT("IA_Dodge"));
-		IA_Dodge->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_Block)
-	{
-		IA_Block = NewObject<UInputAction>(this, TEXT("IA_Block"));
-		IA_Block->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_LockOn)
-	{
-		IA_LockOn = NewObject<UInputAction>(this, TEXT("IA_LockOn"));
-		IA_LockOn->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_SwitchTarget)
-	{
-		IA_SwitchTarget = NewObject<UInputAction>(this, TEXT("IA_SwitchTarget"));
-		IA_SwitchTarget->ValueType = EInputActionValueType::Axis1D;
-	}
-	if (!IA_Zoom)
-	{
-		IA_Zoom = NewObject<UInputAction>(this, TEXT("IA_Zoom"));
-		IA_Zoom->ValueType = EInputActionValueType::Axis1D;
-	}
-	if (!IA_Interact)
-	{
-		IA_Interact = NewObject<UInputAction>(this, TEXT("IA_Interact"));
-		IA_Interact->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_ToggleInventory)
-	{
-		IA_ToggleInventory = NewObject<UInputAction>(this, TEXT("IA_ToggleInventory"));
-		IA_ToggleInventory->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_QuickSlot1)
-	{
-		IA_QuickSlot1 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot1"));
-		IA_QuickSlot1->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_QuickSlot2)
-	{
-		IA_QuickSlot2 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot2"));
-		IA_QuickSlot2->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_QuickSlot3)
-	{
-		IA_QuickSlot3 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot3"));
-		IA_QuickSlot3->ValueType = EInputActionValueType::Boolean;
-	}
-	if (!IA_QuickSlot4)
-	{
-		IA_QuickSlot4 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot4"));
-		IA_QuickSlot4->ValueType = EInputActionValueType::Boolean;
-	}
+
+	// Always create input actions fresh (avoids stale BP serialization issues)
+	IA_Move = NewObject<UInputAction>(this, TEXT("IA_Move"));
+	IA_Move->ValueType = EInputActionValueType::Axis2D;
+
+	IA_Look = NewObject<UInputAction>(this, TEXT("IA_Look"));
+	IA_Look->ValueType = EInputActionValueType::Axis2D;
+
+	IA_MouseLook = NewObject<UInputAction>(this, TEXT("IA_MouseLook"));
+	IA_MouseLook->ValueType = EInputActionValueType::Axis2D;
+
+	IA_LightAttack = NewObject<UInputAction>(this, TEXT("IA_LightAttack"));
+	IA_LightAttack->ValueType = EInputActionValueType::Boolean;
+
+	IA_HeavyAttack = NewObject<UInputAction>(this, TEXT("IA_HeavyAttack"));
+	IA_HeavyAttack->ValueType = EInputActionValueType::Boolean;
+	IA_Dodge = NewObject<UInputAction>(this, TEXT("IA_Dodge"));
+	IA_Dodge->ValueType = EInputActionValueType::Boolean;
+
+	IA_Block = NewObject<UInputAction>(this, TEXT("IA_Block"));
+	IA_Block->ValueType = EInputActionValueType::Boolean;
+
+	IA_LockOn = NewObject<UInputAction>(this, TEXT("IA_LockOn"));
+	IA_LockOn->ValueType = EInputActionValueType::Boolean;
+
+	IA_SwitchTarget = NewObject<UInputAction>(this, TEXT("IA_SwitchTarget"));
+	IA_SwitchTarget->ValueType = EInputActionValueType::Axis1D;
+
+	IA_Zoom = NewObject<UInputAction>(this, TEXT("IA_Zoom"));
+	IA_Zoom->ValueType = EInputActionValueType::Axis1D;
+
+	IA_Interact = NewObject<UInputAction>(this, TEXT("IA_Interact"));
+	IA_Interact->ValueType = EInputActionValueType::Boolean;
+
+	IA_ToggleInventory = NewObject<UInputAction>(this, TEXT("IA_ToggleInventory"));
+	IA_ToggleInventory->ValueType = EInputActionValueType::Boolean;
+
+	IA_QuickSlot1 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot1"));
+	IA_QuickSlot1->ValueType = EInputActionValueType::Boolean;
+
+	IA_QuickSlot2 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot2"));
+	IA_QuickSlot2->ValueType = EInputActionValueType::Boolean;
+
+	IA_QuickSlot3 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot3"));
+	IA_QuickSlot3->ValueType = EInputActionValueType::Boolean;
+
+	IA_QuickSlot4 = NewObject<UInputAction>(this, TEXT("IA_QuickSlot4"));
+	IA_QuickSlot4->ValueType = EInputActionValueType::Boolean;
 
 	// Create and register default input mapping context
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -626,6 +599,9 @@ void ASoulsLikePlayerCharacter::HandleDeath()
 	{
 		DisableInput(PC);
 	}
+
+	// Destroy the pawn after a delay so the controller can respawn us
+	SetLifeSpan(5.0f);
 }
 
 void ASoulsLikePlayerCharacter::OnStateChangedHandler(ECharacterState NewState)
@@ -700,22 +676,56 @@ void ASoulsLikePlayerCharacter::UpdateMovementOrientation()
 
 void ASoulsLikePlayerCharacter::HandleInteract()
 {
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, TEXT("HandleInteract called!"));
+	}
+
 	if (StateComponent->IsInputBlocked())
 	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("Input is BLOCKED!"));
+		}
 		return;
 	}
 
-	// Sphere overlap check for nearby pickups
+	const float InteractRange = 350.0f;
+	const FVector MyLocation = GetActorLocation();
+
+	// Check for bonfire checkpoints by distance (most reliable)
+	int32 BonfireCount = 0;
+	for (TActorIterator<ABonfireCheckpoint> It(GetWorld()); It; ++It)
+	{
+		ABonfireCheckpoint* Bonfire = *It;
+		BonfireCount++;
+		float Dist = FVector::Dist(MyLocation, Bonfire->GetActorLocation());
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow,
+				FString::Printf(TEXT("Bonfire found! Dist: %.0f (need < %.0f)"), Dist, InteractRange));
+		}
+		if (Bonfire && Dist <= InteractRange)
+		{
+			Bonfire->Rest(this);
+			return;
+		}
+	}
+	if (BonfireCount == 0 && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, TEXT("No bonfires found in level!"));
+	}
+
+	// Sphere overlap check for item pickups
 	TArray<FOverlapResult> Overlaps;
-	FCollisionShape Sphere = FCollisionShape::MakeSphere(150.0f);
-	if (GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_WorldDynamic, Sphere))
+	FCollisionShape Sphere = FCollisionShape::MakeSphere(200.0f);
+	if (GetWorld()->OverlapMultiByChannel(Overlaps, MyLocation, FQuat::Identity, ECC_WorldDynamic, Sphere))
 	{
 		for (const FOverlapResult& Overlap : Overlaps)
 		{
 			if (AItemPickup* Pickup = Cast<AItemPickup>(Overlap.GetActor()))
 			{
 				Pickup->PickUp(this);
-				// Refresh quick item HUD
 				ASoulsLikePlayerController* PC = Cast<ASoulsLikePlayerController>(GetController());
 				if (PC)
 				{

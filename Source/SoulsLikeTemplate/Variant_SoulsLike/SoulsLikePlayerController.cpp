@@ -3,6 +3,7 @@
 #include "SoulsLikePlayerController.h"
 #include "SoulsLikeHUD.h"
 #include "SoulsLikePlayerCharacter.h"
+#include "SoulsLikeBaseEnemy.h"
 #include "InventoryWidget.h"
 #include "QuickItemWidget.h"
 #include "InventoryComponent.h"
@@ -10,6 +11,9 @@
 #include "StaminaComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/GameModeBase.h"
+#include "Kismet/GameplayStatics.h"
+#include "LevelUpWidget.h"
+#include "EngineUtils.h"
 #include "TimerManager.h"
 
 ASoulsLikePlayerController::ASoulsLikePlayerController()
@@ -44,6 +48,21 @@ void ASoulsLikePlayerController::BeginPlay()
 	{
 		QuickItemWidget->AddToViewport(5);
 	}
+
+	// Create the level up widget (hidden by default)
+	LevelUpWidget = CreateWidget<ULevelUpWidget>(this, ULevelUpWidget::StaticClass());
+	if (LevelUpWidget)
+	{
+		LevelUpWidget->AddToViewport(15);
+		LevelUpWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	// Record all enemies placed in the level for bonfire respawning
+	RecordEnemySpawnData();
+
+	// Ensure game-only input mode at startup (widget creation can change this)
+	SetInputMode(FInputModeGameOnly());
+	SetShowMouseCursor(false);
 }
 
 void ASoulsLikePlayerController::SetupInputComponent()
@@ -78,8 +97,14 @@ void ASoulsLikePlayerController::OnPossess(APawn* InPawn)
 		{
 			BindHUDToCharacter(SoulsLikeCharacter);
 
-			// Store the initial spawn transform as respawn point
-			RespawnTransform = InPawn->GetActorTransform();
+			// Only store initial spawn as respawn point if no checkpoint has been set
+			if (!bHasCheckpoint)
+			{
+				RespawnTransform = InPawn->GetActorTransform();
+			}
+
+			// Restore top-down camera pitch (BeginPlay may fire before possession)
+			SetControlRotation(FRotator(-55.0f, GetControlRotation().Yaw, 0.0f));
 		}
 	}
 }
@@ -87,6 +112,7 @@ void ASoulsLikePlayerController::OnPossess(APawn* InPawn)
 void ASoulsLikePlayerController::SetRespawnTransform(const FTransform& NewTransform)
 {
 	RespawnTransform = NewTransform;
+	bHasCheckpoint = true;
 }
 
 void ASoulsLikePlayerController::OnPawnDestroyed(AActor* DestroyedActor)
@@ -108,6 +134,9 @@ void ASoulsLikePlayerController::RespawnPlayer()
 	{
 		Possess(NewPawn);
 	}
+
+	// Respawn all enemies when player respawns (souls-like mechanic)
+	RespawnAllEnemies();
 }
 
 void ASoulsLikePlayerController::BindHUDToCharacter(ASoulsLikePlayerCharacter* InCharacter)
@@ -220,4 +249,69 @@ void ASoulsLikePlayerController::ToggleInventory()
 		// Refresh quick item HUD in case slots were assigned
 		RefreshQuickItemHUD();
 	}
+}
+
+// ===== ENEMY RESPAWN SYSTEM =====
+
+void ASoulsLikePlayerController::RecordEnemySpawnData()
+{
+	EnemySpawnRecords.Empty();
+
+	for (TActorIterator<ASoulsLikeBaseEnemy> It(GetWorld()); It; ++It)
+	{
+		ASoulsLikeBaseEnemy* Enemy = *It;
+		if (Enemy)
+		{
+			FEnemySpawnRecord Record;
+			Record.EnemyClass = Enemy->GetClass();
+			Record.SpawnTransform = Enemy->GetActorTransform();
+			EnemySpawnRecords.Add(Record);
+		}
+	}
+}
+
+void ASoulsLikePlayerController::RespawnAllEnemies()
+{
+	// Destroy all existing enemies (alive or dead)
+	TArray<ASoulsLikeBaseEnemy*> ExistingEnemies;
+	for (TActorIterator<ASoulsLikeBaseEnemy> It(GetWorld()); It; ++It)
+	{
+		ExistingEnemies.Add(*It);
+	}
+	for (ASoulsLikeBaseEnemy* Enemy : ExistingEnemies)
+	{
+		if (Enemy)
+		{
+			Enemy->Destroy();
+		}
+	}
+
+	// Spawn fresh enemies from saved records
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	for (const FEnemySpawnRecord& Record : EnemySpawnRecords)
+	{
+		if (Record.EnemyClass)
+		{
+			GetWorld()->SpawnActor<ASoulsLikeBaseEnemy>(
+				Record.EnemyClass,
+				Record.SpawnTransform.GetLocation(),
+				Record.SpawnTransform.GetRotation().Rotator(),
+				SpawnParams
+			);
+		}
+	}
+}
+
+void ASoulsLikePlayerController::ShowLevelUpMenu()
+{
+	if (!LevelUpWidget)
+	{
+		return;
+	}
+
+	LevelUpWidget->SetVisibility(ESlateVisibility::Visible);
+	SetInputMode(FInputModeGameAndUI().SetHideCursorDuringCapture(false));
+	SetShowMouseCursor(true);
 }

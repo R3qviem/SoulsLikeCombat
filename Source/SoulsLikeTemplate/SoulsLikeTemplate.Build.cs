@@ -48,7 +48,8 @@ public class SoulsLikeTemplate : ModuleRules
 			"SoulsLikeTemplate/Variant_SoulsLike/Characters",
 			"SoulsLikeTemplate/Variant_SoulsLike/Animation",
 			"SoulsLikeTemplate/Variant_SoulsLike/AI",
-			"SoulsLikeTemplate/Variant_SoulsLike/UI"
+			"SoulsLikeTemplate/Variant_SoulsLike/UI",
+			"SoulsLikeTemplate/Variant_SoulsLike/Gameplay"
 		});
 
 		// Uncomment if you are using Slate UI
