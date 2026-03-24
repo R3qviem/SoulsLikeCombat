@@ -58,7 +58,7 @@ public:
 	// ===== AI ATTACK =====
 
 	UFUNCTION(BlueprintCallable, Category = "Combat")
-	void DoAIAttack(EAttackType AttackType, int32 MaxComboCount);
+	virtual void DoAIAttack(EAttackType AttackType, int32 MaxComboCount);
 
 	// ===== ISoulsLikeAttacker OVERRIDES =====
 
