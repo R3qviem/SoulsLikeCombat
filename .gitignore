@@ -5,6 +5,9 @@ Intermediate/
 Saved/
 Build/
 
+# Content assets (binary — too large for GitHub, use separate distribution)
+Content/
+
 # Visual Studio / Rider / VSCode
 .vs/
 .vscode/
