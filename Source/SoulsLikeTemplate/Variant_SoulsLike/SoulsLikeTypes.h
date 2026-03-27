@@ -16,6 +16,7 @@ enum class ECharacterState : uint8
 	Attacking,
 	Dodging,
 	Blocking,
+	Parrying,
 	Stunned,
 	Finisher,
 	Dead

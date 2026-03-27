@@ -12,6 +12,8 @@ class ULockOnComponent;
 class UInputBufferComponent;
 class UInventoryComponent;
 class UInputAction;
+class UCameraShakeBase;
+class UCameraOcclusionComponent;
 struct FInputActionValue;
 enum class EBufferedInput : uint8;
 
@@ -64,6 +66,10 @@ public:
 	/** Inventory system */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UInventoryComponent> InventoryComponent;
+
+	/** Camera occlusion — fades objects blocking the view */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<UCameraOcclusionComponent> CameraOcclusionComponent;
 
 	// ===== INPUT ACTIONS =====
 
@@ -176,6 +182,15 @@ protected:
 	/** Override to disable input on death */
 	virtual void HandleDeath() override;
 
+	/** Override for camera impact on hit */
+	virtual void OnAttackHitConfirmed(AActor* HitActor, const FVector& ImpactPoint) override;
+
+	/** Override for camera impact on damage taken */
+	virtual void ProcessDamage(FDamageInfo DamageInfo) override;
+
+	/** Apply a camera impact effect (spring arm offset jolt) */
+	void ApplyCameraImpact(float Intensity);
+
 	/** Cached last move input for dodge direction */
 	FVector2D LastMoveInput = FVector2D::ZeroVector;
 
@@ -188,6 +203,9 @@ protected:
 	/** Maximum charge time before auto-firing */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Charge", meta = (ClampMin = 0.5))
 	float MaxChargeTime = 2.0f;
+
+	/** Timer for camera shake recovery */
+	FTimerHandle CameraShakeTimerHandle;
 
 private:
 

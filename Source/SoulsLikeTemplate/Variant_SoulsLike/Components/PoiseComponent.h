@@ -44,6 +44,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Poise")
 	float GetPoisePercent() const { return MaxPoise > 0.0f ? CurrentPoise / MaxPoise : 0.0f; }
 
+	/** Force stance break (e.g. from a successful parry) */
+	UFUNCTION(BlueprintCallable, Category = "Poise")
+	void ForceStanceBreak();
+
 	/** End the stance broken state (after riposte window expires or finisher is performed) */
 	UFUNCTION(BlueprintCallable, Category = "Poise")
 	void RecoverFromStanceBreak();

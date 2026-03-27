@@ -58,6 +58,23 @@ bool UPoiseComponent::ApplyPoiseDamage(float PoiseDamage)
 	return false;
 }
 
+void UPoiseComponent::ForceStanceBreak()
+{
+	if (bStanceBroken)
+	{
+		return;
+	}
+
+	bStanceBroken = true;
+	CurrentPoise = 0.0f;
+	OnStanceBroken.Broadcast();
+	OnPoiseChanged.Broadcast(0.0f);
+
+	GetWorld()->GetTimerManager().SetTimer(StanceBrokenTimerHandle,
+		FTimerDelegate::CreateUObject(this, &UPoiseComponent::RecoverFromStanceBreak),
+		StanceBrokenDuration, false);
+}
+
 void UPoiseComponent::ResetPoise()
 {
 	CurrentPoise = MaxPoise;

@@ -21,6 +21,7 @@
 #include "WeaponDataAsset.h"
 #include "InputBufferComponent.h"
 #include "InventoryComponent.h"
+#include "CameraOcclusionComponent.h"
 #include "ItemDataAsset.h"
 #include "ItemPickup.h"
 #include "BonfireCheckpoint.h"
@@ -59,16 +60,30 @@ ASoulsLikePlayerCharacter::ASoulsLikePlayerCharacter()
 		GreatswordData->BaseDamage = 25.0f;
 		GreatswordData->DodgeStaminaCost = 20.0f;
 
-		// Load greatsword combo montage
-		static ConstructorHelpers::FObjectFinder<UAnimMontage> SwordComboMontageFinder(
-			TEXT("/Game/Animations/AttackSword/SwordAttackCombo_Montage.SwordAttackCombo_Montage"));
-
-		if (SwordComboMontageFinder.Succeeded())
+		// Load light attack combo montage (GSCombo — Mixamo sword combo)
+		static ConstructorHelpers::FObjectFinder<UAnimMontage> LightComboMontageFinder(
+			TEXT("/Game/Animations/AttackSword/GSCombo_Anim_Montage.GSCombo_Anim_Montage"));
+		if (LightComboMontageFinder.Succeeded())
 		{
-			GreatswordData->LightAttackMontage.AttackMontage = SwordComboMontageFinder.Object;
-			GreatswordData->LightAttackMontage.PlayRate = 1.6f;
-			GreatswordData->HeavyAttackMontage.AttackMontage = SwordComboMontageFinder.Object;
-			GreatswordData->HeavyAttackMontage.PlayRate = 1.6f;
+			GreatswordData->LightAttackMontage.AttackMontage = LightComboMontageFinder.Object;
+			GreatswordData->LightAttackMontage.PlayRate = 1.0f;
+		}
+
+		// Load heavy attack montage (GSHeavy — Mixamo heavy strike)
+		static ConstructorHelpers::FObjectFinder<UAnimMontage> HeavyMontageFinder(
+			TEXT("/Game/Animations/AttackSword/GSHeavy_Anim_Montage.GSHeavy_Anim_Montage"));
+		if (HeavyMontageFinder.Succeeded())
+		{
+			GreatswordData->HeavyAttackMontage.AttackMontage = HeavyMontageFinder.Object;
+			GreatswordData->HeavyAttackMontage.PlayRate = 1.0f;
+		}
+
+		// Load parry montage (Blocking — Mixamo block animation)
+		static ConstructorHelpers::FObjectFinder<UAnimMontage> ParryMontageFinder(
+			TEXT("/Game/Animations/AttackSword/Blocking_Anim_Montage.Blocking_Anim_Montage"));
+		if (ParryMontageFinder.Succeeded())
+		{
+			GreatswordData->ParryMontage = ParryMontageFinder.Object;
 		}
 
 		// Load sword mesh
@@ -114,6 +129,14 @@ ASoulsLikePlayerCharacter::ASoulsLikePlayerCharacter()
 		WeaponManager->UnarmedWeaponData = GreatswordData;
 	}
 
+	// Load death animation (plays before ragdoll)
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> DeathAnimFinder(
+		TEXT("/Game/Animations/AttackSword/GSDeath_Anim.GSDeath_Anim"));
+	if (DeathAnimFinder.Succeeded())
+	{
+		DeathAnimSequence = DeathAnimFinder.Object;
+	}
+
 	// Load directional dodge montages
 	static ConstructorHelpers::FObjectFinder<UAnimMontage> DodgeFMontage(
 		TEXT("/Game/Animations/Dodge_F_Montage.Dodge_F_Montage"));
@@ -155,6 +178,9 @@ ASoulsLikePlayerCharacter::ASoulsLikePlayerCharacter()
 
 	// Create inventory component
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
+
+	// Camera occlusion — fades objects that block the camera view
+	CameraOcclusionComponent = CreateDefaultSubobject<UCameraOcclusionComponent>(TEXT("CameraOcclusionComponent"));
 
 	// Create weapon mesh component attached to weapon socket
 	WeaponMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
@@ -581,6 +607,50 @@ void ASoulsLikePlayerCharacter::OnActionEnd()
 {
 	Super::OnActionEnd();
 	// Buffer consumption happens in OnStateChangedHandler when state transitions to Idle
+}
+
+void ASoulsLikePlayerCharacter::OnAttackHitConfirmed(AActor* HitActor, const FVector& ImpactPoint)
+{
+	// Light camera shake when dealing damage
+	ApplyCameraImpact(4.0f);
+}
+
+void ASoulsLikePlayerCharacter::ProcessDamage(FDamageInfo DamageInfo)
+{
+	ASoulsLikeBaseCharacter::ProcessDamage(DamageInfo);
+
+	// Camera shake on taking damage (stronger than dealing)
+	if (!IsDead() && !DamageInfo.bWasParried)
+	{
+		const float Intensity = DamageInfo.bWasBlocked ? 5.0f : 10.0f;
+		ApplyCameraImpact(Intensity);
+	}
+}
+
+void ASoulsLikePlayerCharacter::ApplyCameraImpact(float Intensity)
+{
+	if (!CameraBoom)
+	{
+		return;
+	}
+
+	// Apply random offset to spring arm socket
+	const FVector RandomOffset(
+		FMath::FRandRange(-Intensity, Intensity),
+		FMath::FRandRange(-Intensity, Intensity),
+		FMath::FRandRange(-Intensity * 0.5f, Intensity * 0.5f)
+	);
+	CameraBoom->SocketOffset += RandomOffset;
+
+	// Restore original offset after a short delay
+	const FVector RestoreOffset = RandomOffset;
+	GetWorld()->GetTimerManager().SetTimer(CameraShakeTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this, RestoreOffset]()
+	{
+		if (CameraBoom)
+		{
+			CameraBoom->SocketOffset -= RestoreOffset;
+		}
+	}), 0.08f, false);
 }
 
 void ASoulsLikePlayerCharacter::HandleDeath()

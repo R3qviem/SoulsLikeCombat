@@ -59,11 +59,20 @@ ASoulsLikeZombieEnemy::ASoulsLikeZombieEnemy()
 	PatrolSpeed = 60.0f;
 	ChaseSpeed = 180.0f;
 
-	// More aggressive AI — wider detection, shorter cooldowns
+	// Zombies use tactical AI but more aggressive — shorter circling, faster commitment
+	bUseTacticalAI = true;
+	MinCircleTime = 0.8f;
+	MaxCircleTime = 2.0f;
+	CircleSpeed = 120.0f;
+	AttackOpportunismChance = 0.8f;
+	HeavyAttackChance = 0.1f;
+	CircleDistanceMultiplier = 1.3f;
+
+	// AI detection and combat ranges
 	SightRange = 1500.0f;
 	SightAngle = 90.0f;
 	AttackRange = 180.0f;
-	AttackCooldown = 1.2f;
+	AttackCooldown = 2.5f;
 	PatrolRadius = 400.0f;
 	PatrolWaitTime = 4.0f;
 	LosePlayerDistance = 2500.0f;
@@ -366,6 +375,15 @@ void ASoulsLikeZombieEnemy::DoZombieAttackTrace()
 			DamageInfoToSend.KnockbackImpulse = KnockbackDir * 200.0f;
 
 			Damageable->ReceiveDamage(DamageInfoToSend);
+
+			// Hit-stop on both
+			ApplyHitStop();
+			ASoulsLikeBaseCharacter* HitCharacter = Cast<ASoulsLikeBaseCharacter>(HitActor);
+			if (HitCharacter)
+			{
+				HitCharacter->ApplyHitStop();
+			}
+
 			break; // Only hit one target per swipe
 		}
 	}

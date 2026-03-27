@@ -169,6 +169,9 @@ void ASoulsLikeBaseEnemy::Tick(float DeltaTime)
 	case EEnemyAIState::Chase:
 		AITick_Chase(DeltaTime);
 		break;
+	case EEnemyAIState::Circling:
+		AITick_Circling(DeltaTime);
+		break;
 	case EEnemyAIState::Attack:
 		AITick_Attack(DeltaTime);
 		break;
@@ -250,10 +253,18 @@ void ASoulsLikeBaseEnemy::AITick_Chase(float DeltaTime)
 		return;
 	}
 
-	// In attack range — attack!
-	if (DistToPlayer <= AttackRange)
+	// In engagement range — either circle tactically or attack directly
+	const float EngageRange = bUseTacticalAI ? AttackRange * CircleDistanceMultiplier : AttackRange;
+	if (DistToPlayer <= EngageRange)
 	{
-		SetAIState(EEnemyAIState::Attack);
+		if (bUseTacticalAI)
+		{
+			SetAIState(EEnemyAIState::Circling);
+		}
+		else
+		{
+			SetAIState(EEnemyAIState::Attack);
+		}
 		return;
 	}
 
@@ -267,6 +278,87 @@ void ASoulsLikeBaseEnemy::AITick_Chase(float DeltaTime)
 	{
 		AIControllerRef->SetFocalPoint(PlayerCharacter->GetActorLocation());
 	}
+}
+
+void ASoulsLikeBaseEnemy::AITick_Circling(float DeltaTime)
+{
+	if (!IsPlayerValid())
+	{
+		SetAIState(EEnemyAIState::Patrol);
+		return;
+	}
+
+	const float DistToPlayer = FVector::Dist(GetActorLocation(), PlayerCharacter->GetActorLocation());
+
+	// Player ran away — chase again
+	if (DistToPlayer > AttackRange * CircleDistanceMultiplier * 1.5f)
+	{
+		SetAIState(EEnemyAIState::Chase);
+		return;
+	}
+
+	CircleTimer += DeltaTime;
+
+	// Check if it's time to commit to an attack
+	if (ShouldAttackNow())
+	{
+		SetAIState(EEnemyAIState::Attack);
+		return;
+	}
+
+	// Periodically change strafe direction for unpredictability
+	DirectionChangeTimer += DeltaTime;
+	if (DirectionChangeTimer >= 1.5f)
+	{
+		DirectionChangeTimer = 0.0f;
+		if (FMath::FRand() < 0.5f)
+		{
+			StrafeDirection *= -1.0f;
+		}
+	}
+
+	// Face the player
+	const FVector ToPlayer = (PlayerCharacter->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+	const FRotator TargetRot = ToPlayer.Rotation();
+	SetActorRotation(FMath::RInterpTo(GetActorRotation(), TargetRot, DeltaTime, 10.0f));
+
+	// Maintain ideal distance — circle-strafe with distance correction
+	const float IdealDist = AttackRange * CircleDistanceMultiplier;
+	const float DistDiff = DistToPlayer - IdealDist;
+
+	// Strafe perpendicular to player direction
+	const FVector StrafeDir = FVector::CrossProduct(ToPlayer, FVector::UpVector) * StrafeDirection;
+
+	// Mix in forward/backward to maintain ideal distance
+	float ForwardWeight = FMath::Clamp(DistDiff / 200.0f, -0.5f, 0.5f);
+
+	// Occasional feints — briefly dart toward player then pull back
+	const float TimeFraction = CircleTimer / FMath::Max(0.1f, CircleDuration);
+	if (TimeFraction > 0.4f && TimeFraction < 0.6f)
+	{
+		// Quick feint forward
+		ForwardWeight = 0.4f;
+		GetCharacterMovement()->MaxWalkSpeed = CircleSpeed * 1.5f;
+	}
+	else if (TimeFraction > 0.6f && TimeFraction < 0.7f)
+	{
+		// Pull back after feint
+		ForwardWeight = -0.3f;
+		GetCharacterMovement()->MaxWalkSpeed = CircleSpeed;
+	}
+	else
+	{
+		GetCharacterMovement()->MaxWalkSpeed = CircleSpeed;
+	}
+
+	// Occasionally stop moving briefly (like studying the player)
+	if (FMath::Fmod(CircleTimer, 2.0f) > 1.7f)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = CircleSpeed * 0.2f;
+	}
+
+	const FVector MoveDir = (StrafeDir + ToPlayer * ForwardWeight).GetSafeNormal();
+	AddMovementInput(MoveDir, 1.0f);
 }
 
 void ASoulsLikeBaseEnemy::AITick_Attack(float DeltaTime)
@@ -304,19 +396,12 @@ void ASoulsLikeBaseEnemy::AITick_Attack(float DeltaTime)
 	const FVector ToPlayer = (PlayerCharacter->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
 	SetActorRotation(ToPlayer.Rotation());
 
-	// Attack — randomly choose light or heavy
-	const EAttackType ChosenAttack = (FMath::FRand() < 0.7f) ? EAttackType::Light : EAttackType::Heavy;
+	// Attack — choose light or heavy based on configurable chance
+	const EAttackType ChosenAttack = (FMath::FRand() >= HeavyAttackChance) ? EAttackType::Light : EAttackType::Heavy;
 	DoAIAttack(ChosenAttack, 2);
 
-	// Sometimes skip cooldown and attack again
-	if (FMath::FRand() < 0.3f)
-	{
-		// Stay in Attack state — will attack again as soon as montage finishes
-	}
-	else
-	{
-		SetAIState(EEnemyAIState::CooldownAfterAttack);
-	}
+	// Always go to cooldown to prevent spam
+	SetAIState(EEnemyAIState::CooldownAfterAttack);
 }
 
 void ASoulsLikeBaseEnemy::AITick_Cooldown(float DeltaTime)
@@ -341,19 +426,26 @@ void ASoulsLikeBaseEnemy::AITick_Cooldown(float DeltaTime)
 	const FRotator TargetRot = ToPlayer.Rotation();
 	SetActorRotation(FMath::RInterpTo(GetActorRotation(), TargetRot, DeltaTime, 10.0f));
 
-	// If player moved away, don't wait — chase immediately
-	if (DistToPlayer > AttackRange * 1.5f)
+	// If player moved far away, chase immediately
+	if (DistToPlayer > AttackRange * 2.5f)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(AttackCooldownTimer);
 		SetAIState(EEnemyAIState::Chase);
 		return;
 	}
 
-	// Close range: slowly advance toward the player to maintain pressure
-	GetCharacterMovement()->MaxWalkSpeed = PatrolSpeed * 1.5f;
+	// After attacking: back away + strafe to create space (like a real fighter)
+	GetCharacterMovement()->MaxWalkSpeed = CircleSpeed;
 	const FVector StrafeDir = FVector::CrossProduct(ToPlayer, FVector::UpVector) * StrafeDirection;
-	// Mix strafe with forward pressure
-	const FVector MoveDir = (StrafeDir * 0.5f + ToPlayer * 0.5f).GetSafeNormal();
+
+	// Back away if too close, strafe if at good distance
+	float BackWeight = 0.0f;
+	const float IdealDist = AttackRange * CircleDistanceMultiplier;
+	if (DistToPlayer < IdealDist)
+	{
+		BackWeight = -0.6f; // Move away from player
+	}
+	const FVector MoveDir = (StrafeDir * 0.7f + ToPlayer * BackWeight).GetSafeNormal();
 	AddMovementInput(MoveDir, 1.0f);
 
 	// Cooldown timer handles transition back to Chase/Attack
@@ -436,19 +528,33 @@ void ASoulsLikeBaseEnemy::SetAIState(EEnemyAIState NewState)
 
 	switch (NewState)
 	{
+	case EEnemyAIState::Circling:
+		CircleTimer = 0.0f;
+		DirectionChangeTimer = 0.0f;
+		CircleDuration = FMath::FRandRange(MinCircleTime, MaxCircleTime);
+		StrafeDirection = (FMath::FRand() < 0.5f) ? -1.0f : 1.0f;
+		break;
+
 	case EEnemyAIState::CooldownAfterAttack:
 		// Randomize strafe direction
 		StrafeDirection = (FMath::FRand() < 0.5f) ? -1.0f : 1.0f;
-		// Short cooldown, then go right back to attacking
+		// Short cooldown, then go back to circling (tactical) or attacking (rush)
 		GetWorld()->GetTimerManager().SetTimer(AttackCooldownTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
 		{
 			if (AIState == EEnemyAIState::CooldownAfterAttack)
 			{
-				// Go straight to Attack if still in range, otherwise Chase
 				if (IsPlayerValid())
 				{
 					const float Dist = FVector::Dist(GetActorLocation(), PlayerCharacter->GetActorLocation());
-					SetAIState(Dist <= AttackRange * 1.5f ? EEnemyAIState::Attack : EEnemyAIState::Chase);
+					if (bUseTacticalAI)
+					{
+						// Return to circling for a more deliberate fight
+						SetAIState(Dist <= AttackRange * CircleDistanceMultiplier * 1.5f ? EEnemyAIState::Circling : EEnemyAIState::Chase);
+					}
+					else
+					{
+						SetAIState(Dist <= AttackRange * 1.5f ? EEnemyAIState::Attack : EEnemyAIState::Chase);
+					}
 				}
 				else
 				{
@@ -591,6 +697,57 @@ void ASoulsLikeBaseEnemy::ProcessDamage(FDamageInfo DamageInfo)
 	{
 		SetAIState(EEnemyAIState::Chase);
 	}
+	// If circling and got hit, chance to retaliate immediately
+	else if (AIState == EEnemyAIState::Circling && !IsDead() && FMath::FRand() < 0.4f)
+	{
+		SetAIState(EEnemyAIState::Attack);
+	}
+}
+
+// ===== TACTICAL AI HELPERS =====
+
+bool ASoulsLikeBaseEnemy::IsPlayerVulnerable() const
+{
+	if (!PlayerCharacter)
+	{
+		return false;
+	}
+
+	ASoulsLikeBaseCharacter* PlayerChar = Cast<ASoulsLikeBaseCharacter>(PlayerCharacter);
+	if (!PlayerChar)
+	{
+		return false;
+	}
+
+	const ECharacterState PlayerCharState = PlayerChar->StateComponent->GetCurrentState();
+	return PlayerCharState == ECharacterState::Attacking ||
+	       PlayerCharState == ECharacterState::Stunned ||
+	       PlayerCharState == ECharacterState::Dodging;
+}
+
+bool ASoulsLikeBaseEnemy::ShouldAttackNow() const
+{
+	// Don't attack too early
+	if (CircleTimer < MinCircleTime)
+	{
+		return false;
+	}
+
+	// Must attack after max circle time
+	if (CircleTimer >= CircleDuration)
+	{
+		return true;
+	}
+
+	// Opportunistic attack when player is vulnerable
+	if (IsPlayerVulnerable() && FMath::FRand() < AttackOpportunismChance * GetWorld()->GetDeltaSeconds())
+	{
+		return true;
+	}
+
+	// Increasing random chance as we approach max circle time
+	const float TimeRatio = (CircleTimer - MinCircleTime) / FMath::Max(0.1f, CircleDuration - MinCircleTime);
+	return FMath::FRand() < TimeRatio * 0.3f * GetWorld()->GetDeltaSeconds();
 }
 
 // ===== DANGER =====

@@ -541,6 +541,17 @@ void ASoulsLikeBaseCharacter::ExecuteAttackTrace(FName SourceBone)
 
 			Damageable->ReceiveDamage(DamageInfoToSend);
 
+			// Hit-stop on both attacker and target
+			ApplyHitStop();
+			ASoulsLikeBaseCharacter* HitCharacter = Cast<ASoulsLikeBaseCharacter>(HitActor);
+			if (HitCharacter)
+			{
+				HitCharacter->ApplyHitStop();
+			}
+
+			// Notify for camera shake etc.
+			OnAttackHitConfirmed(HitActor, Hit.ImpactPoint);
+
 			// Blueprint hook
 			OnDealtDamage(DamageInfoToSend.DamageAmount, Hit.ImpactPoint);
 		}
@@ -795,23 +806,58 @@ void ASoulsLikeBaseCharacter::EnableDeathRagdoll()
 
 void ASoulsLikeBaseCharacter::HandleParry(AActor* ParriedActor)
 {
+	// Enter parrying state
+	StateComponent->ForceState(ECharacterState::Parrying);
+
 	// Play parry montage on self
 	const UWeaponDataAsset* WeaponData = WeaponManager->GetCurrentWeaponData();
 	if (WeaponData && WeaponData->ParryMontage)
 	{
 		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
 		{
-			AnimInstance->Montage_Play(WeaponData->ParryMontage, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
+			const float ParryLength = AnimInstance->Montage_Play(WeaponData->ParryMontage, 1.0f, EMontagePlayReturnType::MontageLength, 0.0f, true);
+
+			// Return to idle when parry animation finishes
+			if (ParryLength > 0.0f)
+			{
+				FOnMontageEnded ParryEndDelegate;
+				ParryEndDelegate.BindWeakLambda(this, [this](UAnimMontage*, bool)
+				{
+					if (StateComponent->GetCurrentState() == ECharacterState::Parrying)
+					{
+						StateComponent->ForceState(ECharacterState::Idle);
+					}
+				});
+				AnimInstance->Montage_SetEndDelegate(ParryEndDelegate, WeaponData->ParryMontage);
+			}
 		}
 	}
+	else
+	{
+		// No parry montage — recover after short delay
+		GetWorld()->GetTimerManager().SetTimer(DodgeRecoveryTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			if (StateComponent->GetCurrentState() == ECharacterState::Parrying)
+			{
+				StateComponent->ForceState(ECharacterState::Idle);
+			}
+		}), 0.3f, false);
+	}
 
-	// Stun the parried actor
+	// Hit-stop on parry for satisfying feedback
+	ApplyHitStop();
+
+	// Stun and stance-break the parried actor
 	if (ParriedActor)
 	{
 		ASoulsLikeBaseCharacter* ParriedCharacter = Cast<ASoulsLikeBaseCharacter>(ParriedActor);
 		if (ParriedCharacter)
 		{
 			ParriedCharacter->StateComponent->ForceState(ECharacterState::Stunned);
+			ParriedCharacter->ApplyHitStop();
+
+			// Force stance break — opens riposte window
+			ParriedCharacter->PoiseComponent->ForceStanceBreak();
 
 			// Play stun montage on the parried character
 			if (ParriedCharacter->StunMontage)
@@ -961,4 +1007,29 @@ void ASoulsLikeBaseCharacter::AdvanceCombo()
 	HitActorsThisSwing.Empty();
 
 	PlayAttackMontageSection(CurrentAttackType, CurrentComboIndex);
+}
+
+// ===== HIT-STOP =====
+
+void ASoulsLikeBaseCharacter::ApplyHitStop()
+{
+	// Don't stack hit-stops
+	if (CustomTimeDilation < 0.5f)
+	{
+		return;
+	}
+
+	CustomTimeDilation = HitStopTimeDilation;
+
+	// Restore normal time after the hit-stop duration (real-time timer so it fires even when dilated)
+	GetWorld()->GetTimerManager().ClearTimer(HitStopTimerHandle);
+	GetWorld()->GetTimerManager().SetTimer(HitStopTimerHandle, FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		CustomTimeDilation = 1.0f;
+	}), HitStopDuration, false);
+}
+
+void ASoulsLikeBaseCharacter::OnAttackHitConfirmed(AActor* HitActor, const FVector& ImpactPoint)
+{
+	// Base implementation does nothing — overridden by player for camera shake
 }

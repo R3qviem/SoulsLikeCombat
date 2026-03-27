@@ -283,6 +283,28 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UAnimSequenceBase> HeavyHitReactionSequence;
 
+public:
+
+	// ===== HIT-STOP =====
+
+	/** Duration of hit-stop freeze in seconds */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|HitStop", meta = (ClampMin = 0, ClampMax = 0.5, Units = "s"))
+	float HitStopDuration = 0.08f;
+
+	/** Time dilation applied during hit-stop (0.01 = near-freeze) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combat|HitStop", meta = (ClampMin = 0.0, ClampMax = 0.1))
+	float HitStopTimeDilation = 0.01f;
+
+	/** Apply hit-stop freeze to this character */
+	void ApplyHitStop();
+
+	/** Called after a confirmed hit on another character — override for camera shake etc. */
+	virtual void OnAttackHitConfirmed(AActor* HitActor, const FVector& ImpactPoint);
+
+	FTimerHandle HitStopTimerHandle;
+
+protected:
+
 	// ===== INTERNAL =====
 
 	/** Attack montage ended delegate */

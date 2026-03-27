@@ -48,10 +48,19 @@ void UCharacterStateComponent::InitializeTransitionRules()
 		ECharacterState::Dead
 	});
 
-	// Blocking -> can return to Idle/Moving, perform finisher, get stunned, or die
+	// Blocking -> can return to Idle/Moving, parry, perform finisher, get stunned, or die
 	TransitionRules.Add(ECharacterState::Blocking, {
 		ECharacterState::Idle,
 		ECharacterState::Moving,
+		ECharacterState::Parrying,
+		ECharacterState::Finisher,
+		ECharacterState::Stunned,
+		ECharacterState::Dead
+	});
+
+	// Parrying -> returns to Idle, can finisher (riposte), get stunned, or die
+	TransitionRules.Add(ECharacterState::Parrying, {
+		ECharacterState::Idle,
 		ECharacterState::Finisher,
 		ECharacterState::Stunned,
 		ECharacterState::Dead
@@ -76,6 +85,7 @@ void UCharacterStateComponent::InitializeTransitionRules()
 	InputBlockingStates = {
 		ECharacterState::Attacking,
 		ECharacterState::Dodging,
+		ECharacterState::Parrying,
 		ECharacterState::Stunned,
 		ECharacterState::Finisher,
 		ECharacterState::Dead

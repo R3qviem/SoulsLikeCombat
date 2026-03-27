@@ -27,6 +27,7 @@ enum class EEnemyAIState : uint8
 	Idle,
 	Patrol,
 	Chase,
+	Circling,
 	Attack,
 	CooldownAfterAttack,
 	Dead
@@ -163,6 +164,36 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI", meta = (ClampMin = 500, Units = "cm"))
 	float LosePlayerDistance = 2000.0f;
 
+	// ===== TACTICAL AI SETTINGS =====
+
+	/** Whether this enemy uses tactical circling behavior (false = rush straight in) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Tactical")
+	bool bUseTacticalAI = true;
+
+	/** Speed while circling/strafing the player */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Tactical", meta = (ClampMin = 50, Units = "cm/s"))
+	float CircleSpeed = 200.0f;
+
+	/** Minimum time to circle before considering an attack */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Tactical", meta = (ClampMin = 0.5, Units = "s"))
+	float MinCircleTime = 1.5f;
+
+	/** Maximum time to circle before committing to an attack */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Tactical", meta = (ClampMin = 1.0, Units = "s"))
+	float MaxCircleTime = 4.0f;
+
+	/** Chance to attack when player is in a vulnerable state (attacking, recovering) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Tactical", meta = (ClampMin = 0, ClampMax = 1))
+	float AttackOpportunismChance = 0.6f;
+
+	/** Chance to use heavy attack vs light */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Tactical", meta = (ClampMin = 0, ClampMax = 1))
+	float HeavyAttackChance = 0.25f;
+
+	/** Ideal distance to maintain while circling (relative to AttackRange) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AI|Tactical", meta = (ClampMin = 1.0, ClampMax = 3.0))
+	float CircleDistanceMultiplier = 1.5f;
+
 private:
 
 	// ===== AI STATE =====
@@ -198,11 +229,18 @@ private:
 	/** Circle-strafe direction (-1 or 1), randomized per cooldown */
 	float StrafeDirection = 1.0f;
 
+	// ===== CIRCLING STATE =====
+
+	float CircleTimer = 0.0f;
+	float CircleDuration = 0.0f;
+	float DirectionChangeTimer = 0.0f;
+
 	// ===== AI BEHAVIOR =====
 
 	void AITick_Idle(float DeltaTime);
 	void AITick_Patrol(float DeltaTime);
 	void AITick_Chase(float DeltaTime);
+	void AITick_Circling(float DeltaTime);
 	void AITick_Attack(float DeltaTime);
 	void AITick_Cooldown(float DeltaTime);
 
@@ -217,6 +255,12 @@ private:
 
 	/** Check if player reference is valid and alive */
 	bool IsPlayerValid() const;
+
+	/** Check if player is in a punishable state */
+	bool IsPlayerVulnerable() const;
+
+	/** Decide whether to commit to an attack during circling */
+	bool ShouldAttackNow() const;
 
 	// ===== EXISTING =====
 
